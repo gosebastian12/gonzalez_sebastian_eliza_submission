@@ -1,0 +1,10 @@
+[project]
+name = "gonzalez-sebastian-eliza-submission"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "fastapi[standard]>=0.136.1",
+    "langchain-ollama>=1.1.0",
+]
