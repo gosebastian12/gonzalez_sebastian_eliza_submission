@@ -1,0 +1,31 @@
+# Local Chroma vector store for RAG (chunk ingest + similarity search).
+# From this directory: docker compose up -d
+#
+# Python (e.g. chromadb HttpClient): host=localhost, port=8000
+#   import chromadb
+#   client = chromadb.HttpClient(host="localhost", port=8000)
+#   client.heartbeat()
+
+services:
+  chromadb:
+    image: chromadb/chroma:1.5.3
+    container_name: chromadb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist segments & SQLite metadata across container restarts (RAG corpus).
+      - chroma_data:/data
+      - ./chroma.docker.yaml:/chroma/config.yaml:ro
+    environment:
+      CONFIG_PATH: /chroma/config.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/api/v2/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  chroma_data:
+    driver: local

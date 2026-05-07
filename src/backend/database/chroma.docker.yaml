@@ -1,0 +1,9 @@
+# Chroma 1.x server config (mounted read-only; see docker-compose.yaml).
+# persist_path must match the container volume mount at /data.
+port: 8000
+listen_address: "0.0.0.0"
+persist_path: "/data"
+allow_reset: true
+sqlitedb:
+  hash_type: "md5"
+  migration_mode: "apply"
