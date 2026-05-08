@@ -61,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--embedding-model",
-        default="qwen3-embedding:8b",
+        default="qwen3-embedding:0.6b",
         help="Ollama embedding model.",
     )
     parser.add_argument("--chroma-host", default="127.0.0.1", help="Chroma host.")

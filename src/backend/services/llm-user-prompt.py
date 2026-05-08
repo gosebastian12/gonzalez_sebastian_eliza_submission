@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from langchain_chroma import Chroma
@@ -37,31 +38,112 @@ conduct a analysis w/it, and use your results to answer the user's question.
 """
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return int(raw)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return float(raw)
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    stripped = raw.strip()
+    return stripped if stripped else default
+
+
 @dataclass
 class RAGConfig:
+    """Tune via environment variables (see `from_env`)."""
+
     collection_name: str = "edgar_reports"
     chroma_host: str = "127.0.0.1"
     chroma_port: int = 8001
-    embedding_model: str = "qwen3-embedding:8b"
-    llm_model: str = "gpt-oss:20b"
+    embedding_model: str = "qwen3-embedding:0.6b"
+    llm_model: str = "llama3.2:1b"
     semantic_k: int = 8
     metadata_k: int = 20
     final_k: int = 6
     use_reranker: bool = False
     rerank_top_n: int = 12
+    # Generation / latency (Ollama)
+    num_predict: int = 384
+    num_ctx: int = 8192
+    reasoning: bool | None = False
+    keep_alive: str | None = "10m"
+    ollama_http_timeout_s: float = 600.0
+    # Prompt packing
+    max_context_chars: int = 14000
+
+    @classmethod
+    def from_env(cls) -> RAGConfig:
+        return cls(
+            collection_name=_env_str("RAG_COLLECTION", cls.collection_name),
+            chroma_host=_env_str("RAG_CHROMA_HOST", cls.chroma_host),
+            chroma_port=_env_int("RAG_CHROMA_PORT", cls.chroma_port),
+            embedding_model=_env_str("RAG_EMBEDDING_MODEL", cls.embedding_model),
+            llm_model=_env_str("RAG_LLM_MODEL", cls.llm_model),
+            semantic_k=_env_int("RAG_SEMANTIC_K", cls.semantic_k),
+            metadata_k=_env_int("RAG_METADATA_K", cls.metadata_k),
+            final_k=_env_int("RAG_FINAL_K", cls.final_k),
+            use_reranker=_env_bool("RAG_USE_RERANKER", cls.use_reranker),
+            rerank_top_n=_env_int("RAG_RERANK_TOP_N", cls.rerank_top_n),
+            num_predict=_env_int("RAG_NUM_PREDICT", cls.num_predict),
+            num_ctx=_env_int("RAG_NUM_CTX", cls.num_ctx),
+            reasoning=(
+                False
+                if os.environ.get("RAG_REASONING", "").strip().lower() in {"0", "false", "no", "off"}
+                else (
+                    True
+                    if os.environ.get("RAG_REASONING", "").strip().lower()
+                    in {"1", "true", "yes", "on"}
+                    else cls.reasoning
+                )
+            ),
+            keep_alive=os.environ.get("RAG_KEEP_ALIVE", cls.keep_alive),
+            ollama_http_timeout_s=_env_float("RAG_OLLAMA_HTTP_TIMEOUT_S", cls.ollama_http_timeout_s),
+            max_context_chars=_env_int("RAG_MAX_CONTEXT_CHARS", cls.max_context_chars),
+        )
 
 
 class EdgarHybridRAG:
     def __init__(self, config: RAGConfig) -> None:
         self.config = config
-        self.embeddings = OllamaEmbeddings(model=config.embedding_model)
+        timeout_kw = {"timeout": config.ollama_http_timeout_s}
+        self.embeddings = OllamaEmbeddings(
+            model=config.embedding_model,
+            sync_client_kwargs=timeout_kw,
+        )
         self.vectorstore = Chroma(
             collection_name=config.collection_name,
             embedding_function=self.embeddings,
             host=config.chroma_host,
             port=config.chroma_port,
         )
-        self.llm = ChatOllama(model=config.llm_model, temperature=0)
+        self.llm = ChatOllama(
+            model=config.llm_model,
+            temperature=0,
+            num_predict=config.num_predict,
+            num_ctx=config.num_ctx,
+            reasoning=config.reasoning,
+            keep_alive=config.keep_alive,
+            client_kwargs=timeout_kw,
+        )
 
     def answer(self, user_prompt: str) -> dict[str, Any]:
         retrieved_docs = self.retrieve(user_prompt)
@@ -222,9 +304,10 @@ class EdgarHybridRAG:
         number = re.search(r"(\d+(?:\.\d+)?)", raw)
         return float(number.group(1)) if number else 0.0
 
-    @staticmethod
-    def _build_context(docs: list[Document]) -> str:
+    def _build_context(self, docs: list[Document]) -> str:
+        budget = max(self.config.max_context_chars, 1000)
         blocks: list[str] = []
+        used = 0
         for i, doc in enumerate(docs, start=1):
             m = doc.metadata
             header = (
@@ -235,7 +318,17 @@ class EdgarHybridRAG:
                 f"file={m.get('file_name', '')} "
                 f"section={m.get('section_title', '')}"
             )
-            blocks.append(f"{header}\n{doc.page_content.strip()}")
+            body = doc.page_content.strip()
+            block = f"{header}\n{body}"
+            overhead = len(block) + (2 if blocks else 0)
+            if used + overhead > budget:
+                remaining = budget - used - len(header) - 3
+                if remaining > 200:
+                    block = f"{header}\n{body[:remaining]}…"
+                    blocks.append(block)
+                break
+            blocks.append(block)
+            used += overhead
         return "\n\n".join(blocks)
 
     @staticmethod
@@ -284,8 +377,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collection", default="edgar_reports")
     parser.add_argument("--chroma-host", default="127.0.0.1")
     parser.add_argument("--chroma-port", type=int, default=8001)
-    parser.add_argument("--embedding-model", default="qwen3-embedding:8b")
-    parser.add_argument("--llm-model", default="gpt-oss:20b")
+    parser.add_argument("--embedding-model", default="qwen3-embedding:0.6b")
+    parser.add_argument("--llm-model", default="llama3.2:1b")
     parser.add_argument("--semantic-k", type=int, default=8)
     parser.add_argument("--final-k", type=int, default=6)
     parser.add_argument("--use-reranker", action="store_true")
@@ -295,7 +388,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     started = time.time()
     args = parse_args()
-    config = RAGConfig(
+    config = replace(
+        RAGConfig.from_env(),
         collection_name=args.collection,
         chroma_host=args.chroma_host,
         chroma_port=args.chroma_port,

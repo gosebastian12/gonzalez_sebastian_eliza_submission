@@ -1,11 +1,15 @@
 from pathlib import Path
+import asyncio
 import importlib.util
+import os
 import sys
+import time
 from functools import lru_cache
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 app = FastAPI()
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -28,7 +32,7 @@ def _load_rag_service():
 @lru_cache(maxsize=1)
 def _get_rag_runtime():
     rag_module = _load_rag_service()
-    config = rag_module.RAGConfig()
+    config = rag_module.RAGConfig.from_env()
     return rag_module, rag_module.EdgarHybridRAG(config)
 
 
@@ -42,19 +46,34 @@ def chat_page(request: Request) -> HTMLResponse:
 
 
 @app.post("/chat", response_class=HTMLResponse)
-def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLResponse:
+async def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLResponse:
     prompt_clean = prompt.strip()
     assistant_text = "RAG pipeline is not connected yet. This is a placeholder response."
+    timeout_seconds = float(os.environ.get("RAG_HTTP_TIMEOUT", "180"))
 
     if prompt_clean:
         try:
+            started = time.time()
             _, rag = _get_rag_runtime()
-            result = rag.answer(prompt_clean)
+            result = await asyncio.wait_for(
+                run_in_threadpool(rag.answer, prompt_clean),
+                timeout=timeout_seconds,
+            )
             assistant_text = str(result.get("answer", "")).strip() or assistant_text
             sources = result.get("sources", [])
             if sources:
                 source_lines = "\n".join(f"- {source}" for source in sources[:4])
                 assistant_text = f"{assistant_text}\n\nSources:\n{source_lines}"
+            elapsed = time.time() - started
+            assistant_text = f"{assistant_text}\n\n(Response time: {elapsed:.1f}s)"
+        except (TimeoutError, asyncio.TimeoutError):
+            assistant_text = (
+                "RAG pipeline timeout: retrieval + generation exceeded "
+                f"{timeout_seconds:.0f}s (set RAG_HTTP_TIMEOUT to raise this limit). "
+                "Try smaller models (RAG_LLM_MODEL / RAG_EMBEDDING_MODEL), lower "
+                "RAG_SEMANTIC_K / RAG_FINAL_K / RAG_NUM_PREDICT / RAG_MAX_CONTEXT_CHARS, "
+                "or verify Ollama and Chroma are responsive."
+            )
         except Exception as exc:
             assistant_text = f"RAG pipeline error: {exc}"
 
