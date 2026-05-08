@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,7 +20,21 @@ DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
 TICKER_RE = re.compile(r"\b[A-Z]{1,5}\b")
 
 # Leave blank per requirement.
-SYSTEM_PROMPT = ""
+SYSTEM_PROMPT = """
+You are a helpful assistant that can answer user questions about quarterly (10-Q) *and* annual (10-K) SEC EDGAR filings.
+You are given a business-focused question and retrieved context from the most relevant filings.
+You need to answer the question based primarily on the provided context.
+
+That context may include tabular financial data whose structure is typically:
+    | Column 1 | | Column 2 | | Column 3 |
+    Sub-header/Additional-Column-Name | | | ... |
+    | Entry 1   | Entry 2    | Entry 3   |
+    | Entry 4   | Entry 5    | Entry 6   |
+    ...
+    <Aggregate-Header> | <Aggregate-Entry> | <Aggregate-Entry> | ... |
+Note that symbols such as "$" or "%" may be used to indicate currency or percentages. You are expected to extract the relevant data,
+conduct a analysis w/it, and use your results to answer the user's question.
+"""
 
 
 @dataclass
@@ -30,6 +45,7 @@ class RAGConfig:
     embedding_model: str = "qwen3-embedding:8b"
     llm_model: str = "gpt-oss:20b"
     semantic_k: int = 8
+    metadata_k: int = 20
     final_k: int = 6
     use_reranker: bool = False
     rerank_top_n: int = 12
@@ -72,22 +88,41 @@ class EdgarHybridRAG:
         }
 
     def retrieve(self, query: str) -> list[Document]:
-        semantic_docs = self.vectorstore.similarity_search(query, k=self.config.semantic_k)
+        # Reuse one query embedding for all vector lookups.
+        query_vector = self.embeddings.embed_query(query)
+        semantic_docs = self.vectorstore.similarity_search_by_vector(
+            query_vector, k=self.config.semantic_k
+        )
 
         # Metadata-keyword path: parse known report metadata tokens from user prompt.
         metadata_filters = self._extract_metadata_filters(query)
         metadata_docs: list[Document] = []
         if metadata_filters:
-            metadata_docs = self.vectorstore.similarity_search(
-                query,
-                k=self.config.semantic_k,
-                filter=metadata_filters,
+            # Use metadata-only fetch first to avoid a second expensive vector query when
+            # filtering by known report metadata (ticker/form/quarter/date).
+            data = self.vectorstore._collection.get(  # noqa: SLF001
+                where=metadata_filters,
+                limit=self.config.metadata_k,
+                include=["documents", "metadatas"],
             )
+            metadata_docs = self._documents_from_get_result(data)
 
         fused = self._fuse_rankings(semantic_docs, metadata_docs, query)
         if self.config.use_reranker:
             fused = self._rerank_with_llm(query, fused, self.config.rerank_top_n)
         return fused[: self.config.final_k]
+
+    @staticmethod
+    def _documents_from_get_result(data: dict[str, Any]) -> list[Document]:
+        docs: list[Document] = []
+        texts = data.get("documents") or []
+        metas = data.get("metadatas") or []
+        for index, text in enumerate(texts):
+            if not text:
+                continue
+            metadata = metas[index] if index < len(metas) and metas[index] else {}
+            docs.append(Document(page_content=text, metadata=metadata))
+        return docs
 
     def _extract_metadata_filters(self, query: str) -> dict[str, str]:
         filters: dict[str, str] = {}
@@ -258,6 +293,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    started = time.time()
     args = parse_args()
     config = RAGConfig(
         collection_name=args.collection,
@@ -273,6 +309,7 @@ def main() -> None:
     result = rag.answer(args.query)
     print(json.dumps(result, indent=2))
     print(json.dumps({"k_analysis": estimate_k_impact()}, indent=2))
+    print(json.dumps({"timing_seconds": round(time.time() - started, 3)}, indent=2))
 
 
 if __name__ == "__main__":

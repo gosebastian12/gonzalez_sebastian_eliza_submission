@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import time
@@ -93,6 +94,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=64,
         help="Number of chunks per embedding+ingestion batch.",
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip chunks already present in the target collection by deterministic id.",
     )
     return parser.parse_args()
 
@@ -322,10 +328,23 @@ def build_documents_for_report(
                         "chunk_index": chunk_index,
                         "chunk_type": block_type,
                     }
+                    chunk_id = _stable_chunk_id(chunk_metadata, piece)
+                    chunk_metadata["chunk_id"] = chunk_id
                     documents.append(Document(page_content=piece, metadata=chunk_metadata))
                     chunk_index += 1
 
     return documents
+
+
+def _stable_chunk_id(metadata: dict[str, str | int], content: str) -> str:
+    base = (
+        f"{metadata.get('file_name', '')}|"
+        f"{metadata.get('chunk_index', '')}|"
+        f"{metadata.get('section_title', '')}|"
+        f"{content[:120]}"
+    )
+    digest = hashlib.sha1(base.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
+    return f"{metadata.get('ticker', 'UNK')}-{metadata.get('filing_date', 'NA')}-{digest}"
 
 
 def iter_report_paths(corpus_dir: Path, pattern: str, limit_files: int) -> Iterable[Path]:
@@ -342,6 +361,7 @@ def ingest_documents(
     chroma_host: str,
     chroma_port: int,
     batch_size: int,
+    skip_existing: bool,
 ) -> None:
     if batch_size <= 0:
         raise ValueError("--batch-size must be greater than 0.")
@@ -364,8 +384,37 @@ def ingest_documents(
     for start in range(0, total, batch_size):
         end = min(start + batch_size, total)
         batch_docs = docs[start:end]
+        batch_ids = [str(doc.metadata.get("chunk_id", "")) for doc in batch_docs]
+        if skip_existing:
+            existing = vectorstore._collection.get(ids=batch_ids, include=[])  # noqa: SLF001
+            existing_ids = set(existing.get("ids") or [])
+            if existing_ids:
+                batch_docs = [
+                    doc
+                    for doc in batch_docs
+                    if str(doc.metadata.get("chunk_id", "")) not in existing_ids
+                ]
+                batch_ids = [
+                    str(doc.metadata.get("chunk_id", ""))
+                    for doc in batch_docs
+                ]
+            if not batch_docs:
+                print(
+                    f"Skipped batch {start // batch_size + 1}: docs {start + 1}-{end}/{total} "
+                    "(all already indexed)",
+                    flush=True,
+                )
+                continue
         batch_started = time.time()
-        vectorstore.add_documents(batch_docs)
+        texts = [doc.page_content for doc in batch_docs]
+        metadatas = [doc.metadata for doc in batch_docs]
+        embeddings = self_or_embed_documents(vectorstore, texts)
+        vectorstore._collection.upsert(  # noqa: SLF001
+            ids=batch_ids,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            documents=texts,
+        )
         elapsed = time.time() - batch_started
         overall_elapsed = time.time() - started
         print(
@@ -373,6 +422,13 @@ def ingest_documents(
             f"(batch {elapsed:.1f}s, total {overall_elapsed:.1f}s)",
             flush=True,
         )
+
+
+def self_or_embed_documents(vectorstore: Chroma, texts: list[str]) -> list[list[float]]:
+    embedding_function = vectorstore._embedding_function  # noqa: SLF001
+    if embedding_function is None:
+        raise RuntimeError("No embedding function configured for Chroma vectorstore.")
+    return embedding_function.embed_documents(texts)
 
 
 def _assert_chroma_reachable(chroma_host: str, chroma_port: int) -> None:
@@ -447,6 +503,7 @@ def main() -> None:
         chroma_host=args.chroma_host,
         chroma_port=args.chroma_port,
         batch_size=args.batch_size,
+        skip_existing=args.skip_existing,
     )
     print(
         f"Ingested {len(all_docs)} chunks into Chroma collection '{args.collection}' at "

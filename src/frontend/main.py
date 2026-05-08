@@ -1,6 +1,7 @@
 from pathlib import Path
 import importlib.util
 import sys
+from functools import lru_cache
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
@@ -24,6 +25,13 @@ def _load_rag_service():
     return module
 
 
+@lru_cache(maxsize=1)
+def _get_rag_runtime():
+    rag_module = _load_rag_service()
+    config = rag_module.RAGConfig()
+    return rag_module, rag_module.EdgarHybridRAG(config)
+
+
 @app.get("/", response_class=HTMLResponse)
 def chat_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
@@ -40,9 +48,7 @@ def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLResponse:
 
     if prompt_clean:
         try:
-            rag_module = _load_rag_service()
-            config = rag_module.RAGConfig()
-            rag = rag_module.EdgarHybridRAG(config)
+            _, rag = _get_rag_runtime()
             result = rag.answer(prompt_clean)
             assistant_text = str(result.get("answer", "")).strip() or assistant_text
             sources = result.get("sources", [])
