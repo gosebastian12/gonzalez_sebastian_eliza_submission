@@ -5,7 +5,9 @@ import json
 import os
 import re
 import time
+from calendar import monthrange
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from typing import Any
 
 from langchain_chroma import Chroma
@@ -19,12 +21,160 @@ FORM_RE = re.compile(r"\b10[- ]?([kq])\b", re.IGNORECASE)
 QUARTER_RE = re.compile(r"\b(20\d{2}Q[1-4])\b", re.IGNORECASE)
 DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
 TICKER_RE = re.compile(r"\b[A-Z]{1,5}\b")
+# Calendar year or fiscal-year style mentions pin retrieval to a period (skip recency boost).
+YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+FY_YEAR_RE = re.compile(r"\bfy\s*[- ]?\s*((?:19|20)\d{2})\b", re.IGNORECASE)
+FISCAL_YEAR_RE = re.compile(
+    r"\bfiscal(?:\s+year)?\s+(?:of\s+)?((?:19|20)\d{2})\b",
+    re.IGNORECASE,
+)
+FILENAME_ISO_DATE_RE = re.compile(r"_(\d{4}-\d{2}-\d{2})_")
+METADATA_WORD_STOPWORDS = frozenset(
+    """
+    the a an and or but if to of for in on at by from with without into about over under
+    than then so as is are was were be been being it its this that these those what which
+    who whom how when where why can could should would will shall may might must tell give
+    show list summarize summary describe explain compare latest recent filings filing sec
+    edgar report annual quarterly company stock shares revenue income earnings cash debt risk
+    factors financial financials business operations management discussion analysis please
+    """.split()
+)
+
+
+def query_pins_specific_period(question: str) -> bool:
+    """True when the user narrows time (year, quarter, fiscal year, or ISO date)."""
+    if DATE_RE.search(question):
+        return True
+    if QUARTER_RE.search(question):
+        return True
+    if FY_YEAR_RE.search(question):
+        return True
+    if FISCAL_YEAR_RE.search(question):
+        return True
+    if YEAR_RE.search(question):
+        return True
+    return False
+
+
+def query_content_keywords(question: str) -> list[str]:
+    tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9.-]{2,}", question.lower())
+    return [t for t in tokens if t not in METADATA_WORD_STOPWORDS]
+
+
+def _quarter_end_epoch(year: int, quarter: int) -> float:
+    month = quarter * 3
+    last_day = monthrange(year, month)[1]
+    dt = datetime(year, month, last_day, tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def report_recency_epoch(metadata: dict[str, Any]) -> float:
+    """Best-effort filing/report time for ordering (newer = larger)."""
+
+    def _parse_iso_date(value: str) -> float | None:
+        value = value.strip()[:10]
+        try:
+            dt = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return dt.timestamp()
+        except ValueError:
+            return None
+
+    fd = str(metadata.get("filing_date") or "").strip()
+    if fd:
+        parsed = _parse_iso_date(fd)
+        if parsed is not None:
+            return parsed
+
+    rp = str(metadata.get("report_period") or "").strip()
+    if rp:
+        parsed = _parse_iso_date(rp)
+        if parsed is not None:
+            return parsed
+
+    quarter = str(metadata.get("quarter") or "").strip().upper().replace(" ", "")
+    qm = re.match(r"^(20\d{2})Q([1-4])$", quarter)
+    if qm:
+        return _quarter_end_epoch(int(qm.group(1)), int(qm.group(2)))
+
+    file_name = str(metadata.get("file_name") or "")
+    dates = FILENAME_ISO_DATE_RE.findall(file_name)
+    epochs: list[float] = []
+    for entry in dates:
+        parsed = _parse_iso_date(entry)
+        if parsed is not None:
+            epochs.append(parsed)
+    if epochs:
+        return max(epochs)
+
+    return 0.0
+
+
+def keyword_metadata_alignment_score(doc: Document, question: str) -> float:
+    """Lexical alignment of chunk metadata (+ light body hits) with the user question."""
+    meta = doc.metadata
+    keywords = query_content_keywords(question)
+    hay_parts = [
+        str(meta.get(key, ""))
+        for key in (
+            "company",
+            "ticker",
+            "form_type",
+            "quarter",
+            "report_period",
+            "filing_date",
+            "section_title",
+            "file_name",
+            "chunk_type",
+        )
+    ]
+    haystack = " ".join(hay_parts).lower()
+    score = 0.0
+    for kw in keywords:
+        if kw in haystack:
+            score += 1.25
+
+    q_lower = question.lower()
+    ticker = str(meta.get("ticker") or "").strip().upper()
+    if ticker and re.search(rf"\b{re.escape(ticker.lower())}\b", q_lower):
+        score += 4.5
+
+    company = str(meta.get("company") or "").strip().lower()
+    if len(company) >= 4:
+        norm = re.sub(r"[^\w\s]+", "", company)
+        for part in norm.split():
+            if len(part) >= 4 and part in q_lower:
+                score += 2.0
+                break
+
+    form_val = str(meta.get("form_type") or "").lower().replace(" ", "")
+    if form_val:
+        if "10-k" in form_val or "10k" in form_val:
+            if "10-k" in q_lower or re.search(r"\b10\s*k\b", q_lower) or "annual" in q_lower:
+                score += 2.25
+        if "10-q" in form_val or "10q" in form_val:
+            if "10-q" in q_lower or re.search(r"\b10\s*q\b", q_lower) or "quarterly" in q_lower:
+                score += 2.25
+
+    section = str(meta.get("section_title") or "").lower()
+    for kw in keywords:
+        if len(kw) >= 5 and kw in section:
+            score += 0.85
+
+    body = doc.page_content.lower()[:12000]
+    for kw in keywords:
+        hits = body.count(kw)
+        if hits:
+            score += min(hits, 4) * 0.35
+
+    return score
 
 # Leave blank per requirement.
 SYSTEM_PROMPT = """
-You are a helpful assistant that can answer user questions about quarterly (10-Q) *and* annual (10-K) SEC EDGAR filings.
-You are given a business-focused question and retrieved context from the most relevant filings.
-You need to answer the question based primarily on the provided context.
+You are a helpful assistant that can answer user business and investment focused questions by
+analyzing and summarizing the contextual text provided in the second half of this prompt. This
+context is text from recent quarterly (10-Q) *and* annual (10-K) SEC EDGAR filings.
+You need to answer the question based on the provided context. Do not hallcuniate or ignore the
+given context whatsoever. You must prioritize the context over your own knowledge or prior experience.
 
 That context may include tabular financial data whose structure is typically:
     | Column 1 | | Column 2 | | Column 3 |
@@ -33,8 +183,16 @@ That context may include tabular financial data whose structure is typically:
     | Entry 4   | Entry 5    | Entry 6   |
     ...
     <Aggregate-Header> | <Aggregate-Entry> | <Aggregate-Entry> | ... |
-Note that symbols such as "$" or "%" may be used to indicate currency or percentages. You are expected to extract the relevant data,
-conduct a analysis w/it, and use your results to answer the user's question.
+Note that symbols such as "$" or "%" may be used to indicate currency or percentages.
+You are expected to extract the relevant data, conduct a analysis w/it, and use your results to
+answer the user's question(s).
+
+Utilize a professional, business-appropriate tone. Provide objective results that are helpful, insightful,
+and based in the reality described below.
+
+========================================
+Textual context to emphasis::
+
 """
 
 
@@ -69,30 +227,47 @@ def _env_str(name: str, default: str) -> str:
 
 @dataclass
 class RAGConfig:
-    """Tune via environment variables (see `from_env`)."""
+    """Tune via env vars (all optional).
+
+    Context budget (llama3.2:1b supports a large window in Ollama; defaults stay modest for RAM/latency).
+    ``RAG_NUM_CTX`` — passed to Ollama as ``num_ctx`` (KV cache size).
+    ``RAG_NUM_PREDICT`` — max output tokens; must leave room inside ``RAG_NUM_CTX``.
+    ``RAG_PROMPT_OVERHEAD_TOKENS`` — reserve tokens for system prompt, chat template, question & wrappers.
+    ``RAG_MAX_CONTEXT_CHARS`` — soft cap on retrieved text length (also clamped by context math).
+    ``RAG_CHARS_PER_TOKEN_EST`` — chars/token guess for clamping retrieved text (tabular EDGAR text ≈ 3–4).
+    ``RAG_NUM_CTX_HARD_CAP`` — safety clamp on absurd ``RAG_NUM_CTX`` values (default 131072).
+    ``RAG_DISABLE_RECENCY_BOOST`` — skip recency tie-breaking in lexical re-ranking (testing only).
+    """
 
     collection_name: str = "edgar_reports"
     chroma_host: str = "127.0.0.1"
     chroma_port: int = 8001
     embedding_model: str = "qwen3-embedding:0.6b"
     llm_model: str = "llama3.2:1b"
-    semantic_k: int = 8
-    metadata_k: int = 20
-    final_k: int = 6
+    semantic_k: int = 6
+    metadata_k: int = 12
+    final_k: int = 4
     use_reranker: bool = False
-    rerank_top_n: int = 12
-    # Generation / latency (Ollama)
-    num_predict: int = 384
-    num_ctx: int = 8192
+    rerank_top_n: int = 3
+    disable_recency_boost: bool = False
+    # Generation / latency (Ollama). Defaults sized so prompt + retrieval fit comfortably in num_ctx.
+    num_predict: int = 256
+    num_ctx: int = 4096
     reasoning: bool | None = False
     keep_alive: str | None = "10m"
     ollama_http_timeout_s: float = 600.0
-    # Prompt packing
-    max_context_chars: int = 14000
+    # Prompt packing (retrieval injected into user message — must fit remaining num_ctx budget).
+    max_context_chars: int = 9600
+    prompt_overhead_tokens: int = 780
+    chars_per_token_estimate: float = 3.3
 
     @classmethod
     def from_env(cls) -> RAGConfig:
-        return cls(
+        hard_cap = _env_int("RAG_NUM_CTX_HARD_CAP", 131072)
+        raw_ctx = _env_int("RAG_NUM_CTX", cls.num_ctx)
+        num_ctx = max(2048, min(raw_ctx, hard_cap))
+
+        cfg = cls(
             collection_name=_env_str("RAG_COLLECTION", cls.collection_name),
             chroma_host=_env_str("RAG_CHROMA_HOST", cls.chroma_host),
             chroma_port=_env_int("RAG_CHROMA_PORT", cls.chroma_port),
@@ -103,8 +278,9 @@ class RAGConfig:
             final_k=_env_int("RAG_FINAL_K", cls.final_k),
             use_reranker=_env_bool("RAG_USE_RERANKER", cls.use_reranker),
             rerank_top_n=_env_int("RAG_RERANK_TOP_N", cls.rerank_top_n),
+            disable_recency_boost=_env_bool("RAG_DISABLE_RECENCY_BOOST", cls.disable_recency_boost),
             num_predict=_env_int("RAG_NUM_PREDICT", cls.num_predict),
-            num_ctx=_env_int("RAG_NUM_CTX", cls.num_ctx),
+            num_ctx=num_ctx,
             reasoning=(
                 False
                 if os.environ.get("RAG_REASONING", "").strip().lower() in {"0", "false", "no", "off"}
@@ -118,30 +294,61 @@ class RAGConfig:
             keep_alive=os.environ.get("RAG_KEEP_ALIVE", cls.keep_alive),
             ollama_http_timeout_s=_env_float("RAG_OLLAMA_HTTP_TIMEOUT_S", cls.ollama_http_timeout_s),
             max_context_chars=_env_int("RAG_MAX_CONTEXT_CHARS", cls.max_context_chars),
+            prompt_overhead_tokens=_env_int("RAG_PROMPT_OVERHEAD_TOKENS", cls.prompt_overhead_tokens),
+            chars_per_token_estimate=_env_float(
+                "RAG_CHARS_PER_TOKEN_EST", cls.chars_per_token_estimate
+            ),
+        )
+        return cfg.normalized()
+
+    def normalized(self) -> RAGConfig:
+        """Ensure ``num_predict``, overhead, and a minimum retrieval budget fit in ``num_ctx``."""
+        overhead = max(64, self.prompt_overhead_tokens)
+        predict = max(32, self.num_predict)
+        ctx = max(2048, self.num_ctx)
+        min_retrieval_tokens = 512
+        slack = 96
+
+        # Leave room for retrieved text in the user message (see ``_effective_context_char_budget``).
+        max_predict_room = ctx - overhead - min_retrieval_tokens - slack
+        if predict > max_predict_room:
+            predict = max(max_predict_room, 64)
+
+        total_fixed = overhead + predict + min_retrieval_tokens + slack
+        if total_fixed > ctx:
+            overhead = max(64, ctx - predict - min_retrieval_tokens - slack)
+
+        est = max(2.5, min(self.chars_per_token_estimate, 6.0))
+        return replace(
+            self,
+            num_ctx=ctx,
+            num_predict=predict,
+            prompt_overhead_tokens=overhead,
+            chars_per_token_estimate=est,
         )
 
 
 class EdgarHybridRAG:
     def __init__(self, config: RAGConfig) -> None:
-        self.config = config
-        timeout_kw = {"timeout": config.ollama_http_timeout_s}
+        self.config = config.normalized()
+        timeout_kw = {"timeout": self.config.ollama_http_timeout_s}
         self.embeddings = OllamaEmbeddings(
-            model=config.embedding_model,
+            model=self.config.embedding_model,
             sync_client_kwargs=timeout_kw,
         )
         self.vectorstore = Chroma(
-            collection_name=config.collection_name,
+            collection_name=self.config.collection_name,
             embedding_function=self.embeddings,
-            host=config.chroma_host,
-            port=config.chroma_port,
+            host=self.config.chroma_host,
+            port=self.config.chroma_port,
         )
         self.llm = ChatOllama(
-            model=config.llm_model,
+            model=self.config.llm_model,
             temperature=0,
-            num_predict=config.num_predict,
-            num_ctx=config.num_ctx,
-            reasoning=config.reasoning,
-            keep_alive=config.keep_alive,
+            num_predict=self.config.num_predict,
+            num_ctx=self.config.num_ctx,
+            reasoning=self.config.reasoning,
+            keep_alive=self.config.keep_alive,
             client_kwargs=timeout_kw,
         )
 
@@ -167,6 +374,7 @@ class EdgarHybridRAG:
             "sources": [self._source_label(doc) for doc in retrieved_docs],
             "metadata_filters_used": self._extract_metadata_filters(user_prompt),
             "retrieved_count": len(retrieved_docs),
+            "period_pinned_in_query": query_pins_specific_period(user_prompt),
         }
 
     def retrieve(self, query: str) -> list[Document]:
@@ -190,9 +398,24 @@ class EdgarHybridRAG:
             metadata_docs = self._documents_from_get_result(data)
 
         fused = self._fuse_rankings(semantic_docs, metadata_docs, query)
+        reranked = self._rerank_lexical_then_recency(fused, query)
         if self.config.use_reranker:
-            fused = self._rerank_with_llm(query, fused, self.config.rerank_top_n)
-        return fused[: self.config.final_k]
+            reranked = self._rerank_with_llm(query, reranked, self.config.rerank_top_n)
+        return reranked[: self.config.final_k]
+
+    def _rerank_lexical_then_recency(self, docs: list[Document], query: str) -> list[Document]:
+        """Rank by keyword/metadata match; break ties with newer filings unless period is pinned."""
+        if not docs:
+            return []
+        pinned = query_pins_specific_period(query)
+        ordered = list(docs)
+        if not pinned and not self.config.disable_recency_boost:
+            ordered.sort(key=lambda d: report_recency_epoch(d.metadata), reverse=True)
+        ordered.sort(
+            key=lambda d: keyword_metadata_alignment_score(d, query),
+            reverse=True,
+        )
+        return ordered
 
     @staticmethod
     def _documents_from_get_result(data: dict[str, Any]) -> list[Document]:
@@ -304,8 +527,18 @@ class EdgarHybridRAG:
         number = re.search(r"(\d+(?:\.\d+)?)", raw)
         return float(number.group(1)) if number else 0.0
 
+    def _effective_context_char_budget(self) -> int:
+        """Max chars for retrieved context so prompt fits under ``num_ctx``."""
+        cfg = self.config
+        reserved = cfg.num_predict + cfg.prompt_overhead_tokens
+        available_tokens = cfg.num_ctx - reserved
+        available_tokens = max(available_tokens, 128)
+        return max(int(available_tokens * cfg.chars_per_token_estimate), 384)
+
     def _build_context(self, docs: list[Document]) -> str:
-        budget = max(self.config.max_context_chars, 1000)
+        hard_cap = self._effective_context_char_budget()
+        budget = min(max(self.config.max_context_chars, 256), hard_cap)
+        budget = max(budget, 384)
         blocks: list[str] = []
         used = 0
         for i, doc in enumerate(docs, start=1):
@@ -343,8 +576,8 @@ class EdgarHybridRAG:
 
 def estimate_k_impact(
     avg_chunk_tokens: int = 360,
-    query_and_format_tokens: int = 220,
-    context_window_tokens: int = 8192,
+    query_and_format_tokens: int = 780,
+    context_window_tokens: int = 4096,
 ) -> dict[str, Any]:
     # Conservative planning values for prompt-budgeting with large models.
     recommendations: list[dict[str, int]] = []
@@ -367,7 +600,7 @@ def estimate_k_impact(
             "context_window_tokens": context_window_tokens,
         },
         "recommendations": recommendations,
-        "suggested_default_k": 8,
+        "suggested_default_k": 6,
     }
 
 
@@ -379,8 +612,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chroma-port", type=int, default=8001)
     parser.add_argument("--embedding-model", default="qwen3-embedding:0.6b")
     parser.add_argument("--llm-model", default="llama3.2:1b")
-    parser.add_argument("--semantic-k", type=int, default=8)
-    parser.add_argument("--final-k", type=int, default=6)
+    parser.add_argument("--semantic-k", type=int, default=6)
+    parser.add_argument("--final-k", type=int, default=4)
     parser.add_argument("--use-reranker", action="store_true")
     return parser.parse_args()
 
@@ -398,7 +631,7 @@ def main() -> None:
         semantic_k=args.semantic_k,
         final_k=args.final_k,
         use_reranker=args.use_reranker,
-    )
+    ).normalized()
     rag = EdgarHybridRAG(config)
     result = rag.answer(args.query)
     print(json.dumps(result, indent=2))

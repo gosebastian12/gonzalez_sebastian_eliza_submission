@@ -69,13 +69,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-chars",
         type=int,
-        default=2200,
+        default=800,
         help="Maximum characters per final chunk.",
     )
     parser.add_argument(
         "--overlap-chars",
         type=int,
-        default=250,
+        default=100,
         help="Character overlap used when splitting long chunks.",
     )
     parser.add_argument(
@@ -92,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=64,
+        default=32,
         help="Number of chunks per embedding+ingestion batch.",
     )
     parser.add_argument(
