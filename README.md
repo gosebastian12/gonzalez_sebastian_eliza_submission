@@ -10,7 +10,7 @@ This project uses [Chroma](https://www.trychroma.com/) as an open-source vector 
 | --- | --- |
 | Compose file | `src/backend/database/docker-compose.yaml` |
 | Server config | `src/backend/database/chroma.docker.yaml` (listen address, persistence path) |
-| HTTP API | `http://127.0.0.1:8000` (host from your machine: `localhost`) |
+| HTTP API | `http://127.0.0.1:8001` (host from your machine: `localhost`) |
 | Persistence | Docker volume `chroma_data` → `/data` inside the container |
 
 ### Prerequisites
@@ -43,7 +43,7 @@ docker compose -f src/backend/database/docker-compose.yaml ps
 **HTTP (API v2 heartbeat):**
 
 ```bash
-curl -sS http://127.0.0.1:8000/api/v2/heartbeat
+curl -sS http://127.0.0.1:8001/api/v2/heartbeat
 ```
 
 **Python (`chromadb` HTTP client):**
@@ -51,11 +51,11 @@ curl -sS http://127.0.0.1:8000/api/v2/heartbeat
 ```python
 import chromadb
 
-client = chromadb.HttpClient(host="localhost", port=8000)
+client = chromadb.HttpClient(host="localhost", port=8001)
 client.heartbeat()
 ```
 
-Use the same host and port when configuring **LangChain** `Chroma` / vector store helpers that talk to a remote Chroma server (point them at `http://localhost:8000` per library docs).
+Use the same host and port when configuring **LangChain** `Chroma` / vector store helpers that talk to a remote Chroma server (point them at `http://localhost:8001` per library docs).
 
 ### Stop and data retention
 
