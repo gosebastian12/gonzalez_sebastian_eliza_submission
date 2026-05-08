@@ -11,3 +11,4 @@ wheels/
 
 # Data processing
 edgar_corpus/
+.DS_Store

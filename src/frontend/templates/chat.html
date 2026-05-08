@@ -44,7 +44,7 @@
               {% for message in messages %}
                 <div class="mb-3">
                   <span class="badge text-bg-secondary text-uppercase">{{ message.role }}</span>
-                  <p class="mb-0 mt-2">{{ message.content }}</p>
+                  <p class="mb-0 mt-2" style="white-space: pre-wrap;">{{ message.content }}</p>
                 </div>
               {% endfor %}
             {% else %}
