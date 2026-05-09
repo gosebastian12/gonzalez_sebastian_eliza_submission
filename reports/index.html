@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EDGAR Hybrid RAG — Technical briefing (draft)</title>
+    <style>
+      :root {
+        --bg: #0c1117;
+        --bg-slide: #121923;
+        --text: #e8eef7;
+        --muted: #8b9bb4;
+        --accent: #3d8bfd;
+        --accent-dim: #2563c9;
+        --border: #263042;
+        --font-sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+        --font-mono: "SF Mono", "Consolas", "Menlo", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        overflow: hidden;
+      }
+
+      .deck {
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: clamp(12px, 3vw, 32px);
+      }
+
+      .slide {
+        display: none;
+        width: min(1120px, 92vw);
+        aspect-ratio: 16 / 9;
+        max-height: min(90vh, 630px);
+        background: var(--bg-slide);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+        padding: clamp(28px, 4vw, 56px);
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+      }
+
+      .slide.active {
+        display: flex;
+      }
+
+      .slide-brand {
+        position: absolute;
+        top: clamp(20px, 3vw, 28px);
+        left: clamp(28px, 4vw, 56px);
+        right: clamp(28px, 4vw, 56px);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.75rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .slide-brand span:last-child {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      /* Title slide */
+      .slide-title .slide-inner {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+        padding-top: 1rem;
+      }
+
+      .slide-title h1 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(1.75rem, 4.2vw, 2.75rem);
+        font-weight: 650;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+
+      .slide-title .subtitle {
+        margin: 0 auto;
+        max-width: 36ch;
+        font-size: clamp(1rem, 2vw, 1.25rem);
+        color: var(--muted);
+        font-weight: 400;
+        line-height: 1.45;
+      }
+
+      .slide-title .rule {
+        width: 72px;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+        border-radius: 2px;
+        margin: 2rem auto 1.5rem;
+      }
+
+      .slide-title .meta {
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .slide-title .meta strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      /* Blank / placeholder slides */
+      .slide-blank .slide-inner {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-top: 2rem;
+      }
+
+      .slide-blank .placeholder-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin-bottom: 0.75rem;
+      }
+
+      .slide-blank h2 {
+        margin: 0 0 1rem;
+        font-size: clamp(1.35rem, 3vw, 2rem);
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .slide-blank .placeholder-lines {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .slide-blank .placeholder-lines li {
+        height: 10px;
+        background: var(--border);
+        border-radius: 4px;
+        margin-bottom: 14px;
+        opacity: 0.55;
+      }
+
+      .slide-blank .placeholder-lines li:nth-child(1) {
+        width: 92%;
+      }
+      .slide-blank .placeholder-lines li:nth-child(2) {
+        width: 78%;
+      }
+      .slide-blank .placeholder-lines li:nth-child(3) {
+        width: 85%;
+      }
+      .slide-blank .placeholder-lines li:nth-child(4) {
+        width: 64%;
+      }
+
+      /* HUD */
+      .hud {
+        position: fixed;
+        bottom: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 8px 16px;
+        background: rgba(18, 25, 35, 0.92);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-size: 0.78rem;
+        color: var(--muted);
+        z-index: 10;
+      }
+
+      .hud kbd {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        padding: 2px 7px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .hud .counter {
+        font-family: var(--font-mono);
+        color: var(--text);
+      }
+
+      @media print {
+        html,
+        body {
+          overflow: visible;
+          background: #fff;
+        }
+        .hud {
+          display: none;
+        }
+        .slide {
+          display: flex !important;
+          page-break-after: always;
+          box-shadow: none;
+          border: 1px solid #ccc;
+          max-height: none;
+          margin: 0 auto 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="deck" id="deck">
+      <!-- Slide 1: Title -->
+      <section class="slide slide-title active" aria-label="Title slide">
+        <div class="slide-brand">
+          <span>Technical briefing</span>
+          <span>0</span>
+        </div>
+        <div class="slide-inner">
+          <h1>RAG System for SEC EDGAR Filings</h1>
+          <p class="subtitle">
+            Architecture, retrieval pipeline, and evaluation findings for SEC filing–grounded Q&amp;A.
+          </p>
+          <div class="rule" aria-hidden="true"></div>
+          <p class="meta">
+            <strong>ELIZA Technical Assessment</strong> — 3-tier Chunking, Ollama embeddings, Chroma vector database, hybrid retrieval, &amp; Ollama generation.
+          </p>
+        </div>
+      </section>
+
+      <!-- Slides 2–12: Blank placeholders (content TBD) -->
+      <section class="slide slide-blank" aria-label="Slide 2 placeholder">
+        <div class="slide-brand">
+          <span>Agenda / outline</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 3 placeholder">
+        <div class="slide-brand">
+          <span>SEC EDGAR Filings Summary</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 4 placeholder">
+        <div class="slide-brand">
+          <span>System Architecture</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 5 placeholder">
+        <div class="slide-brand">
+          <span>Chunking, Embedding &amp; Ingestion</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 6 placeholder">
+        <div class="slide-brand">
+          <span>Retrieval &amp; Reranking</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 8 placeholder">
+        <div class="slide-brand">
+          <span>Generation &amp; UI</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 10 placeholder">
+        <div class="slide-brand">
+          <span>Testing Approach</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 11 placeholder">
+        <div class="slide-brand">
+          <span>Findings</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide slide-blank" aria-label="Slide 12 placeholder">
+        <div class="slide-brand">
+          <span>Limitations &amp; Future Improvements</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <p class="placeholder-label">Placeholder</p>
+          <h2>Slide title TBD</h2>
+          <ul class="placeholder-lines">
+            <li></li>
+            <li></li>
+            <li></li>
+            <li></li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <div class="hud" role="status" aria-live="polite">
+      <span><kbd>←</kbd> <kbd>→</kbd> navigate</span>
+      <span><kbd>Home</kbd> first · <kbd>End</kbd> last</span>
+      <span class="counter" id="slideCounter"></span>
+    </div>
+
+    <script>
+      (function () {
+        var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+        var idx = 0;
+        var counter = document.getElementById("slideCounter");
+
+        function fillSlideNums() {
+          slides.forEach(function (slide, i) {
+            var el = slide.querySelector(".slide-num");
+            if (el) {
+              el.textContent = i + 1 + " / " + slides.length;
+            }
+          });
+        }
+
+        function show(i) {
+          if (i < 0) i = 0;
+          if (i >= slides.length) i = slides.length - 1;
+          idx = i;
+          slides.forEach(function (s, j) {
+            s.classList.toggle("active", j === idx);
+          });
+          counter.textContent = idx + 1 + " / " + slides.length;
+        }
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+            e.preventDefault();
+            show(idx + 1);
+          } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+            e.preventDefault();
+            show(idx - 1);
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            show(0);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            show(slides.length - 1);
+          }
+        });
+
+        fillSlideNums();
+        show(0);
+      })();
+    </script>
+  </body>
+</html>
