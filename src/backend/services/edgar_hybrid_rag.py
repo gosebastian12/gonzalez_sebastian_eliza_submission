@@ -12,7 +12,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-from edgar_query_patterns import extract_metadata_filters
+from edgar_query_patterns import (
+    build_chroma_where_clause,
+    build_chroma_where_clause_for_ticker,
+    extract_metadata_filters,
+    extract_tickers_for_retrieval,
+)
 from rag_config import RAGConfig
 from rag_context import (
     build_retrieval_context,
@@ -20,11 +25,7 @@ from rag_context import (
     source_label,
 )
 from rag_prompts import SYSTEM_PROMPT
-from rag_reranking import (
-    fusion_metadata_keyword_overlap,
-    query_pins_specific_period,
-    rerank_lexical_then_recency,
-)
+from rag_reranking import query_pins_specific_period, rerank_lexical_then_recency
 
 
 class EdgarHybridRAG:
@@ -52,7 +53,7 @@ class EdgarHybridRAG:
         )
 
     def answer(self, user_prompt: str) -> dict[str, Any]:
-        retrieved_docs = self.retrieve(user_prompt)
+        retrieved_docs, chroma_where = self.retrieve(user_prompt)
         hard_cap = effective_context_char_budget(
             num_ctx=self.config.num_ctx,
             num_predict=self.config.num_predict,
@@ -78,57 +79,86 @@ class EdgarHybridRAG:
         )
         chain = prompt | self.llm
         response = chain.invoke({"question": user_prompt, "context": context})
+        n = len(retrieved_docs)
         return {
             "answer": response.content,
             "sources": [source_label(doc) for doc in retrieved_docs],
+            "source_chunks": [
+                {"label": source_label(doc), "content": doc.page_content}
+                for doc in retrieved_docs
+            ],
             "metadata_filters_used": extract_metadata_filters(user_prompt),
-            "retrieved_count": len(retrieved_docs),
+            "retrieval_where_clause": chroma_where,
+            "retrieved_count": n,
+            "sources_count": n,
             "period_pinned_in_query": query_pins_specific_period(user_prompt),
         }
 
-    def retrieve(self, query: str) -> list[Document]:
+    def retrieve(self, query: str) -> tuple[list[Document], dict[str, Any] | None]:
+        """Metadata filter (Chroma ``where``) first, then semantic search inside that subset."""
+        chroma_where = build_chroma_where_clause(query)
         query_vector = self.embeddings.embed_query(query)
-        semantic_docs = self.vectorstore.similarity_search_by_vector(
-            query_vector, k=self.config.semantic_k
-        )
+        tickers_multi = extract_tickers_for_retrieval(query)
 
-        metadata_filters = extract_metadata_filters(query)
-        metadata_docs: list[Document] = []
-        if metadata_filters:
-            data = self.vectorstore._collection.get(  # noqa: SLF001
-                where=metadata_filters,
-                limit=self.config.metadata_k,
-                include=["documents", "metadatas"],
+        if len(tickers_multi) >= 2:
+            per_ticker_k = max(
+                self.config.multi_entity_per_ticker_semantic_k,
+                (self.config.semantic_k + len(tickers_multi) - 1) // len(tickers_multi),
             )
-            metadata_docs = documents_from_chroma_get(data)
+            pools: list[Document] = []
+            for sym in tickers_multi:
+                wt = build_chroma_where_clause_for_ticker(query, sym)
+                pools.extend(
+                    self.vectorstore.similarity_search_by_vector(
+                        query_vector,
+                        k=per_ticker_k,
+                        filter=wt,
+                    )
+                )
+            semantic_docs = dedupe_documents(pools, document_identity_key)
+            if not semantic_docs:
+                semantic_docs = self.vectorstore.similarity_search_by_vector(
+                    query_vector,
+                    k=self.config.semantic_k,
+                    filter=chroma_where,
+                )
+        else:
+            semantic_docs = self.vectorstore.similarity_search_by_vector(
+                query_vector,
+                k=self.config.semantic_k,
+                filter=chroma_where,
+            )
 
-        fused = fuse_rrf_rankings(
-            semantic_docs,
-            metadata_docs,
-            query,
-            doc_key_fn=document_identity_key,
-            overlap_fn=fusion_metadata_keyword_overlap,
-        )
+        if not semantic_docs and chroma_where is not None:
+            semantic_docs = self.vectorstore.similarity_search_by_vector(
+                query_vector,
+                k=self.config.semantic_k,
+                filter=None,
+            )
+        semantic_docs = dedupe_documents(semantic_docs, document_identity_key)
         reranked = rerank_lexical_then_recency(
-            fused,
+            semantic_docs,
             query,
             disable_recency_boost=self.config.disable_recency_boost,
+            min_chunk_body_chars=self.config.min_chunk_body_chars,
+            length_log_weight=self.config.rerank_length_log_weight,
         )
         if self.config.use_reranker:
             reranked = rerank_with_llm(self.llm, query, reranked, self.config.rerank_top_n)
-        return reranked[: self.config.final_k]
+        final_docs = reranked[: self.config.final_k]
+        return final_docs, chroma_where
 
 
-def documents_from_chroma_get(data: dict[str, Any]) -> list[Document]:
-    docs: list[Document] = []
-    texts = data.get("documents") or []
-    metas = data.get("metadatas") or []
-    for index, text in enumerate(texts):
-        if not text:
+def dedupe_documents(docs: list[Document], key_fn: Callable[[Document], str]) -> list[Document]:
+    seen: set[str] = set()
+    out: list[Document] = []
+    for doc in docs:
+        key = key_fn(doc)
+        if key in seen:
             continue
-        metadata = metas[index] if index < len(metas) and metas[index] else {}
-        docs.append(Document(page_content=text, metadata=metadata))
-    return docs
+        seen.add(key)
+        out.append(doc)
+    return out
 
 
 def document_identity_key(doc: Document) -> str:
@@ -138,35 +168,6 @@ def document_identity_key(doc: Document) -> str:
         f"{meta.get('chunk_index', '')}::"
         f"{meta.get('section_title', '')}"
     )
-
-
-def fuse_rrf_rankings(
-    semantic_docs: list[Document],
-    metadata_docs: list[Document],
-    query: str,
-    *,
-    doc_key_fn: Callable[[Document], str],
-    overlap_fn: Callable[[Document, str], int],
-    rrf_k: int = 60,
-    overlap_weight: float = 0.015,
-) -> list[Document]:
-    """Reciprocal rank fusion with optional lexical overlap bonus on the metadata list."""
-    scores: dict[str, float] = {}
-    doc_map: dict[str, Document] = {}
-
-    for rank, doc in enumerate(semantic_docs, start=1):
-        key = doc_key_fn(doc)
-        scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank)
-        doc_map[key] = doc
-
-    for rank, doc in enumerate(metadata_docs, start=1):
-        key = doc_key_fn(doc)
-        scores[key] = scores.get(key, 0.0) + 1.0 / (rrf_k + rank)
-        scores[key] += overlap_weight * overlap_fn(doc, query)
-        doc_map[key] = doc
-
-    ranked_keys = sorted(scores.keys(), key=lambda key: scores[key], reverse=True)
-    return [doc_map[key] for key in ranked_keys]
 
 
 def rerank_with_llm(llm: ChatOllama, query: str, docs: list[Document], top_n: int) -> list[Document]:

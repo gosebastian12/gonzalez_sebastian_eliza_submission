@@ -1,12 +1,23 @@
 from pathlib import Path
 import asyncio
 import importlib.util
+import json
 import os
 import sys
 import time
+from dataclasses import asdict
 from functools import lru_cache
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # type: ignore[misc, assignment]
+
 from fastapi import FastAPI, Form, Request
+
+# Load ``.env`` from cwd so ``RAG_*`` overrides apply when not exported in the shell.
+if load_dotenv:
+    load_dotenv()
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
@@ -30,10 +41,34 @@ def _load_rag_service():
 
 
 @lru_cache(maxsize=1)
+def _get_rag_module():
+    """Import the RAG service once; it is expensive only on first load."""
+    return _load_rag_service()
+
+
+_rag_config_fingerprint: str | None = None
+_rag_client: object | None = None
+
+
+def _fingerprint_rag_config(config) -> str:
+    """Stable string so env-driven ``RAG_*`` changes rebuild the client."""
+    return json.dumps(asdict(config), sort_keys=True, default=str)
+
+
 def _get_rag_runtime():
-    rag_module = _load_rag_service()
+    """Return ``(module, EdgarHybridRAG)``. Recreates the client when ``RAGConfig.from_env()`` changes.
+
+    Previously this used ``lru_cache`` on the whole runtime, so ``RAG_FINAL_K`` and other vars
+    were frozen until process restart. Source count is capped by ``RAG_FINAL_K`` (not ``RAG_SEMANTIC_K``).
+    """
+    global _rag_config_fingerprint, _rag_client
+    rag_module = _get_rag_module()
     config = rag_module.RAGConfig.from_env()
-    return rag_module, rag_module.EdgarHybridRAG(config)
+    fp = _fingerprint_rag_config(config)
+    if fp != _rag_config_fingerprint or _rag_client is None:
+        _rag_client = rag_module.EdgarHybridRAG(config)
+        _rag_config_fingerprint = fp
+    return rag_module, _rag_client
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -49,6 +84,8 @@ def chat_page(request: Request) -> HTMLResponse:
 async def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLResponse:
     prompt_clean = prompt.strip()
     assistant_text = "RAG pipeline is not connected yet. This is a placeholder response."
+    source_chunks: list[dict[str, str]] | None = None
+    rag_finished_ok = False
     timeout_seconds = float(os.environ.get("RAG_HTTP_TIMEOUT", "180"))
 
     if prompt_clean:
@@ -59,13 +96,17 @@ async def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLRespon
                 run_in_threadpool(rag.answer, prompt_clean),
                 timeout=timeout_seconds,
             )
+            rag_finished_ok = True
             assistant_text = str(result.get("answer", "")).strip() or assistant_text
-            sources = result.get("sources", [])
-            if sources:
-                source_lines = "\n".join(f"- {source}" for source in sources)
-                assistant_text = f"{assistant_text}\n\nSources:\n{source_lines}"
             elapsed = time.time() - started
             assistant_text = f"{assistant_text}\n\n(Response time: {elapsed:.1f}s)"
+            source_chunks = result.get("source_chunks")
+            if not source_chunks and result.get("sources"):
+                source_chunks = [
+                    {"label": label, "content": "(Chunk text unavailable for this response.)"}
+                    for label in result["sources"]
+                ]
+            source_chunks = source_chunks or []
         except (TimeoutError, asyncio.TimeoutError):
             assistant_text = (
                 "RAG pipeline timeout: retrieval + generation exceeded "
@@ -77,12 +118,16 @@ async def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLRespon
         except Exception as exc:
             assistant_text = f"RAG pipeline error: {exc}"
 
+    assistant_message: dict[str, object] = {
+        "role": "assistant",
+        "content": assistant_text,
+    }
+    if rag_finished_ok and source_chunks is not None:
+        assistant_message["source_chunks"] = source_chunks
+
     messages = [
         {"role": "user", "content": prompt_clean},
-        {
-            "role": "assistant",
-            "content": assistant_text,
-        },
+        assistant_message,
     ]
     return templates.TemplateResponse(
         request=request,

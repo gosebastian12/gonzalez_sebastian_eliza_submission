@@ -23,12 +23,18 @@ def build_retrieval_context(
     *,
     max_context_chars: int,
     hard_cap_chars: int,
+    min_partial_body_chars: int = 200,
 ) -> str:
-    """Concatenate chunk bodies with headers; respects ``min(max_context_chars, hard_cap_chars)``."""
+    """Concatenate chunk bodies with headers under the char budget.
+
+    Tries to include **every** retrieved chunk: uses a truncated body when a full chunk does not
+    fit, then continues (so later chunks are not dropped just because an earlier one was large).
+    """
     budget = min(max(max_context_chars, 256), hard_cap_chars)
     budget = max(budget, 384)
     blocks: list[str] = []
     used = 0
+
     for i, doc in enumerate(docs, start=1):
         m = doc.metadata
         header = (
@@ -40,16 +46,21 @@ def build_retrieval_context(
             f"section={m.get('section_title', '')}"
         )
         body = doc.page_content.strip()
-        block = f"{header}\n{body}"
-        overhead = len(block) + (2 if blocks else 0)
-        if used + overhead > budget:
-            remaining = budget - used - len(header) - 3
-            if remaining > 200:
-                block = f"{header}\n{body[:remaining]}…"
-                blocks.append(block)
-            break
-        blocks.append(block)
-        used += overhead
+        sep_cost = 2 if blocks else 0
+        block_full = f"{header}\n{body}"
+        total_full = sep_cost + len(block_full)
+
+        if used + total_full <= budget:
+            blocks.append(block_full)
+            used += total_full
+            continue
+
+        remaining_for_body = budget - used - sep_cost - len(header) - 1
+        if remaining_for_body > min_partial_body_chars:
+            truncated = f"{header}\n{body[:remaining_for_body]}…"
+            blocks.append(truncated)
+            used += sep_cost + len(truncated)
+
     return "\n\n".join(blocks)
 
 

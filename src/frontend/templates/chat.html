@@ -42,9 +42,44 @@
           >
             {% if messages %}
               {% for message in messages %}
+                {% set msg_i = loop.index0 %}
                 <div class="mb-3">
                   <span class="badge text-bg-secondary text-uppercase">{{ message.role }}</span>
-                  <p class="mb-0 mt-2" style="white-space: pre-wrap;">{{ message.content }}</p>
+                  <div class="mt-2">
+                    <p class="mb-0" style="white-space: pre-wrap;">{{ message.content }}</p>
+                    {% if message.role == "assistant" and message.source_chunks is defined %}
+                      <div class="mt-2 small">
+                        <span class="fw-semibold text-secondary">Sources</span>
+                        {% if message.source_chunks|length > 0 %}
+                          <ul class="list-unstyled mb-0 mt-1">
+                            {% for chunk in message.source_chunks %}
+                              <li>
+                                <a
+                                  href="#"
+                                  class="link-primary rag-source-link"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#ragSourceChunkModal"
+                                  data-chunk-id="rag-chunk-{{ msg_i }}-{{ loop.index0 }}"
+                                >{{ chunk.label }}</a>
+                              </li>
+                            {% endfor %}
+                          </ul>
+                          {% for chunk in message.source_chunks %}
+                            <textarea
+                              id="rag-chunk-{{ msg_i }}-{{ loop.index0 }}"
+                              class="d-none"
+                              readonly
+                              aria-hidden="true"
+                            >{{ chunk.content }}</textarea>
+                          {% endfor %}
+                        {% else %}
+                          <p class="text-secondary mb-0 mt-1">
+                            No chunks were retrieved for this answer (check Chroma ingests and filters).
+                          </p>
+                        {% endif %}
+                      </div>
+                    {% endif %}
+                  </div>
                 </div>
               {% endfor %}
             {% else %}
@@ -58,4 +93,69 @@
     </div>
   </div>
 </div>
+
+<div
+  class="modal fade"
+  id="ragSourceChunkModal"
+  tabindex="-1"
+  aria-labelledby="ragSourceChunkModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title text-break" id="ragSourceChunkModalLabel">Source chunk</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <pre
+          id="ragSourceChunkModalBody"
+          class="mb-0 small text-body-secondary"
+          style="white-space: pre-wrap; max-height: 70vh;"
+        ></pre>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  function wireRagSourceModal() {
+    var modalEl = document.getElementById("ragSourceChunkModal");
+    if (!modalEl || typeof bootstrap === "undefined") {
+      return false;
+    }
+    if (modalEl.dataset.ragModalWired === "1") {
+      return true;
+    }
+    modalEl.dataset.ragModalWired = "1";
+    modalEl.addEventListener("show.bs.modal", function (event) {
+      var trigger = event.relatedTarget;
+      if (!trigger || !trigger.getAttribute) {
+        return;
+      }
+      var chunkId = trigger.getAttribute("data-chunk-id");
+      if (!chunkId) {
+        return;
+      }
+      var ta = document.getElementById(chunkId);
+      var title = document.getElementById("ragSourceChunkModalLabel");
+      var body = document.getElementById("ragSourceChunkModalBody");
+      if (!title || !body) {
+        return;
+      }
+      title.textContent = (trigger.textContent && trigger.textContent.trim()) || "Source chunk";
+      body.textContent = ta ? ta.value : "(Chunk not found.)";
+    });
+    return true;
+  }
+  if (!wireRagSourceModal()) {
+    window.addEventListener("load", function () {
+      wireRagSourceModal();
+    });
+  }
+})();
+</script>
 {% endblock %}

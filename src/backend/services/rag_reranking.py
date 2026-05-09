@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from calendar import monthrange
 from datetime import datetime, timezone
@@ -16,6 +17,8 @@ from edgar_query_patterns import (
     FY_YEAR_RE,
     QUARTER_RE,
     YEAR_RE,
+    company_name_ticker_boost,
+    normalize_query_text,
 )
 
 METADATA_WORD_STOPWORDS = frozenset(
@@ -98,6 +101,12 @@ def report_recency_epoch(metadata: dict[str, Any]) -> float:
     return 0.0
 
 
+def chunk_body_is_substantive(text: str, min_chars: int) -> bool:
+    if min_chars <= 0:
+        return True
+    return len(text.strip()) >= min_chars
+
+
 def keyword_metadata_alignment_score(doc: Document, question: str) -> float:
     """Lexical alignment of chunk metadata (+ light body hits) with the user question."""
     meta = doc.metadata
@@ -122,10 +131,11 @@ def keyword_metadata_alignment_score(doc: Document, question: str) -> float:
         if kw in haystack:
             score += 1.25
 
-    q_lower = question.lower()
+    q_lower = normalize_query_text(question).lower()
     ticker = str(meta.get("ticker") or "").strip().upper()
     if ticker and re.search(rf"\b{re.escape(ticker.lower())}\b", q_lower):
         score += 4.5
+    score += company_name_ticker_boost(q_lower, ticker)
 
     company = str(meta.get("company") or "").strip().lower()
     if len(company) >= 4:
@@ -158,31 +168,30 @@ def keyword_metadata_alignment_score(doc: Document, question: str) -> float:
     return score
 
 
-def fusion_metadata_keyword_overlap(doc: Document, query: str) -> int:
-    """Light overlap score used inside reciprocal-rank fusion."""
-    haystack = " ".join(
-        str(doc.metadata.get(k, ""))
-        for k in ("company", "ticker", "form_type", "quarter", "report_period", "filing_date")
-    ).lower()
-    tokens = [t.lower() for t in re.findall(r"[a-zA-Z0-9-]+", query)]
-    return sum(1 for token in tokens if len(token) >= 3 and token in haystack)
-
-
 def rerank_lexical_then_recency(
     docs: list[Document],
     query: str,
     *,
     disable_recency_boost: bool,
+    min_chunk_body_chars: int = 0,
+    length_log_weight: float = 1.25,
 ) -> list[Document]:
-    """Rank by keyword/metadata match; break ties with newer filings unless period is pinned."""
+    """Rank by relevance, then longer chunks (more LLM-usable context), then recency."""
     if not docs:
         return []
     pinned = query_pins_specific_period(query)
+    lw = max(0.0, length_log_weight)
+
+    def sort_key(doc: Document) -> tuple[bool, float, float, float]:
+        substantive = chunk_body_is_substantive(doc.page_content, min_chunk_body_chars)
+        kw = keyword_metadata_alignment_score(doc, query)
+        body_len = math.log1p(len(doc.page_content.strip()))
+        if pinned or disable_recency_boost:
+            rec = 0.0
+        else:
+            rec = report_recency_epoch(doc.metadata)
+        return (substantive, kw, body_len * lw, rec)
+
     ordered = list(docs)
-    if not pinned and not disable_recency_boost:
-        ordered.sort(key=lambda d: report_recency_epoch(d.metadata), reverse=True)
-    ordered.sort(
-        key=lambda d: keyword_metadata_alignment_score(d, query),
-        reverse=True,
-    )
+    ordered.sort(key=sort_key, reverse=True)
     return ordered

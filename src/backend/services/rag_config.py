@@ -47,6 +47,10 @@ class RAGConfig:
     ``RAG_CHARS_PER_TOKEN_EST`` — chars/token guess for clamping retrieved text (tabular EDGAR text ≈ 3–4).
     ``RAG_NUM_CTX_HARD_CAP`` — safety clamp on absurd ``RAG_NUM_CTX`` values (default 131072).
     ``RAG_DISABLE_RECENCY_BOOST`` — skip recency tie-breaking in lexical re-ranking (testing only).
+    ``RAG_MIN_CHUNK_BODY_CHARS`` — prefer chunks at least this long for substantive tie-breaks.
+    ``RAG_RERANK_LENGTH_LOG_WEIGHT`` — after relevance, favor longer chunks using ``log1p(char_len) * weight``.
+    ``RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K`` — when multiple companies are detected, Chroma
+    ``k`` per ticker before merge (floor also uses ``RAG_SEMANTIC_K`` / issuer count).
     """
 
     collection_name: str = "edgar_reports"
@@ -54,11 +58,13 @@ class RAGConfig:
     chroma_port: int = 8001
     embedding_model: str = "qwen3-embedding:0.6b"
     llm_model: str = "llama3.2:1b"
-    semantic_k: int = 6
-    metadata_k: int = 12
-    final_k: int = 4
-    use_reranker: bool = False
-    rerank_top_n: int = 3
+    semantic_k: int = 9
+    multi_entity_per_ticker_semantic_k: int = 5
+    final_k: int = 6
+    min_chunk_body_chars: int = 80
+    rerank_length_log_weight: float = 1.35
+    use_reranker: bool = True
+    rerank_top_n: int = 6
     disable_recency_boost: bool = False
     num_predict: int = 256
     num_ctx: int = 4096
@@ -82,8 +88,17 @@ class RAGConfig:
             embedding_model=_env_str("RAG_EMBEDDING_MODEL", cls.embedding_model),
             llm_model=_env_str("RAG_LLM_MODEL", cls.llm_model),
             semantic_k=_env_int("RAG_SEMANTIC_K", cls.semantic_k),
-            metadata_k=_env_int("RAG_METADATA_K", cls.metadata_k),
+            multi_entity_per_ticker_semantic_k=_env_int(
+                "RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K",
+                cls.multi_entity_per_ticker_semantic_k,
+            ),
             final_k=_env_int("RAG_FINAL_K", cls.final_k),
+            min_chunk_body_chars=_env_int(
+                "RAG_MIN_CHUNK_BODY_CHARS", cls.min_chunk_body_chars
+            ),
+            rerank_length_log_weight=_env_float(
+                "RAG_RERANK_LENGTH_LOG_WEIGHT", cls.rerank_length_log_weight
+            ),
             use_reranker=_env_bool("RAG_USE_RERANKER", cls.use_reranker),
             rerank_top_n=_env_int("RAG_RERANK_TOP_N", cls.rerank_top_n),
             disable_recency_boost=_env_bool("RAG_DISABLE_RECENCY_BOOST", cls.disable_recency_boost),
