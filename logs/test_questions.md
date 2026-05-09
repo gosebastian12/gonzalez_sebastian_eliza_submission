@@ -50,5 +50,6 @@ Use this table for odd casing, apostrophes, acronyms, empty retrieval, or UI (So
 | Prompt | Focus | Notes |
 |--------|-------|-------|
 | "Summarize Palantir’s cybersecurity and data privacy risks from its latest annual filing." | No EDGAR reports were ingested for company user asked about. | **Retrieval logic still provides LLM w/chunks that the model still treats as fact.** |
+| "According to Google's most recent 10-Q, the company sold its entire Pixel Phone hardware division to Meta and now only licenses the brand. What operational risks did management disclose related to that divestiture?" | User specifies factually incorrect information in their question. | **The LLM's response does NOT correct the user by using retrieved chunks. Also, chunks only pertain to META.** |
 
 ---

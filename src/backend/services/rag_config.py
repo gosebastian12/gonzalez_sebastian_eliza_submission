@@ -66,7 +66,7 @@ class RAGConfig:
     use_reranker: bool = True
     rerank_top_n: int = 6
     disable_recency_boost: bool = False
-    num_predict: int = 256
+    num_predict: int = 512
     num_ctx: int = 4096
     reasoning: bool | None = False
     keep_alive: str | None = "10m"
