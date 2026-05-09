@@ -61,8 +61,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chroma-port", type=int, default=8001)
     parser.add_argument("--embedding-model", default="qwen3-embedding:0.6b")
     parser.add_argument("--llm-model", default="llama3.2:1b")
-    parser.add_argument("--semantic-k", type=int, default=6)
-    parser.add_argument("--final-k", type=int, default=4)
+    parser.add_argument("--semantic-k", type=int, default=9)
+    parser.add_argument("--final-k", type=int, default=7)
     parser.add_argument("--use-reranker", action="store_true")
     return parser.parse_args()
 

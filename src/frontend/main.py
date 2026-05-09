@@ -62,7 +62,7 @@ async def submit_prompt(request: Request, prompt: str = Form(...)) -> HTMLRespon
             assistant_text = str(result.get("answer", "")).strip() or assistant_text
             sources = result.get("sources", [])
             if sources:
-                source_lines = "\n".join(f"- {source}" for source in sources[:4])
+                source_lines = "\n".join(f"- {source}" for source in sources)
                 assistant_text = f"{assistant_text}\n\nSources:\n{source_lines}"
             elapsed = time.time() - started
             assistant_text = f"{assistant_text}\n\n(Response time: {elapsed:.1f}s)"
