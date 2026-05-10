@@ -1,7 +1,7 @@
 [project]
 name = "gonzalez-sebastian-eliza-submission"
 version = "0.1.0"
-description = "Add your description here"
+description = "RAG system to answer business questions by referencing SEC Annual and Quarterly Reports."
 readme = "README.md"
 requires-python = ">=3.10,<4.0"
 dependencies = [

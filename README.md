@@ -8,6 +8,12 @@ SEC EDGAR **10-K / 10-Q** RAG demo: filings are **chunked** and **embedded** int
 uv sync
 ```
 
+## Prompt log, evaluation notes, and final template
+
+- **Prompt iterations** — [`logs/sys_prompts_log.md`](logs/sys_prompts_log.md): history of system-instruction changes and rationale (assessment deliverable: log of prompt iterations).
+- **Quality evaluation** — [`logs/test_questions.md`](logs/test_questions.md): manual test prompts aligned with sample business questions, expected retrieval behavior, and known gaps.
+- **Final prompt in code** — [`src/backend/services/rag_prompts.py`](src/backend/services/rag_prompts.py) (`SYSTEM_PROMPT`); the user message wrapper (question + retrieved context) is built in [`src/backend/services/edgar_hybrid_rag.py`](src/backend/services/edgar_hybrid_rag.py) inside `EdgarHybridRAG.answer()`.
+
 ---
 
 ## How the pieces fit together
@@ -213,8 +219,10 @@ RAG logic is split under **`src/backend/services/`** for readability:
 | `rag_config.py` | `RAGConfig` + env parsing |
 | `rag_reranking.py` | Lexical/metadata scores + recency reranking |
 | `rag_context.py` | Prompt context packing |
-| `rag_prompts.py` | System prompt text |
+| `rag_prompts.py` | System prompt text (see also [`logs/sys_prompts_log.md`](logs/sys_prompts_log.md)) |
 | `edgar_query_patterns.py` | Regex helpers + metadata filters |
+
+Manual QA prompts and observations: [`logs/test_questions.md`](logs/test_questions.md).
 
 ---
 
