@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" role="img" aria-labelledby="tr">
+  <title id="tr">retrieve() branch logic in edgar_hybrid_rag.py</title>
+  <rect width="900" height="380" fill="#121923"/>
+  <text x="450" y="26" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="12" text-anchor="middle">EdgarHybridRAG.retrieve() -- sequential steps as implemented</text>
+  <rect x="280" y="44" width="340" height="40" rx="6" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <text x="450" y="69" fill="#e8eef7" font-family="Consolas,monospace" font-size="11" text-anchor="middle">build_chroma_where_clause(query)</text>
+  <rect x="280" y="96" width="340" height="40" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+  <text x="450" y="121" fill="#e8eef7" font-family="Consolas,monospace" font-size="11" text-anchor="middle">embed_query(query)</text>
+  <polygon points="450,148 430,168 470,168" fill="#3d8bfd"/>
+  <text x="450" y="188" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">len(extract_tickers_for_retrieval) &gt;= 2 ?</text>
+  <rect x="80" y="208" width="280" height="72" rx="6" fill="#0c1117" stroke="#263042"/>
+  <text x="220" y="232" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="11" text-anchor="middle">Yes: per ticker</text>
+  <text x="220" y="252" fill="#e8eef7" font-family="Consolas,monospace" font-size="9" text-anchor="middle">build_chroma_where_clause_for_ticker</text>
+  <text x="220" y="268" fill="#e8eef7" font-family="Consolas,monospace" font-size="9" text-anchor="middle">similarity_search_by_vector -&gt; merge -&gt; dedupe</text>
+  <rect x="540" y="208" width="280" height="56" rx="6" fill="#0c1117" stroke="#263042"/>
+  <text x="680" y="238" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="11" text-anchor="middle">No: single search w/ chroma_where</text>
+  <text x="680" y="254" fill="#e8eef7" font-family="Consolas,monospace" font-size="9" text-anchor="middle">k = semantic_k</text>
+  <rect x="240" y="296" width="420" height="64" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+  <text x="450" y="318" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="11" text-anchor="middle">If empty and filter set -&gt; retry filter=None -&gt; dedupe</text>
+  <text x="450" y="338" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="11" text-anchor="middle">rerank_lexical_then_recency -&gt; optional rerank_with_llm -&gt; [:final_k]</text>
+</svg>

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" role="img" aria-labelledby="t">
+  <title id="t">Request flow from FastAPI through EdgarHybridRAG to Chroma and Ollama</title>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2563c9"/>
+      <stop offset="100%" style="stop-color:#3d8bfd"/>
+    </linearGradient>
+    <marker id="m" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <polygon points="0 0, 8 4, 0 8" fill="#3d8bfd"/>
+    </marker>
+  </defs>
+  <rect width="920" height="320" fill="#121923"/>
+  <text x="460" y="28" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="13" text-anchor="middle">Grounded in src/frontend/main.py and src/backend/services/edgar_hybrid_rag.py</text>
+  <rect x="40" y="60" width="140" height="56" rx="8" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <text x="110" y="95" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="14" text-anchor="middle">Browser</text>
+  <rect x="220" y="60" width="160" height="56" rx="8" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <text x="300" y="95" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="13" text-anchor="middle">FastAPI POST /chat</text>
+  <rect x="420" y="52" width="200" height="72" rx="8" fill="#1a2436" stroke="url(#g)" stroke-width="2"/>
+  <text x="520" y="82" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="600" text-anchor="middle">EdgarHybridRAG</text>
+  <text x="520" y="102" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">answer() -&gt; retrieve()</text>
+  <rect x="660" y="52" width="220" height="72" rx="8" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <text x="770" y="82" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="600" text-anchor="middle">Chroma + Ollama</text>
+  <text x="770" y="102" fill="#8b9bb4" font-family="Consolas,monospace" font-size="10" text-anchor="middle">similarity_search_by_vector</text>
+  <text x="770" y="116" fill="#8b9bb4" font-family="Consolas,monospace" font-size="10" text-anchor="middle">ChatOllama / Embeddings</text>
+  <path d="M180 88 L220 88" stroke="#3d8bfd" stroke-width="2" marker-end="url(#m)"/>
+  <path d="M380 88 L420 88" stroke="#3d8bfd" stroke-width="2" marker-end="url(#m)"/>
+  <path d="M620 88 L660 88" stroke="#3d8bfd" stroke-width="2" marker-end="url(#m)"/>
+  <text x="460" y="180" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="13" text-anchor="middle">threadpool: run_in_threadpool(rag.answer, prompt)</text>
+  <rect x="190" y="200" width="540" height="88" rx="8" fill="#0c1117" stroke="#263042"/>
+  <text x="460" y="228" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">RAGConfig.from_env(); reload client when fingerprint changes</text>
+  <text x="460" y="250" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">langchain_chroma.Chroma + langchain_ollama.OllamaEmbeddings / ChatOllama</text>
+  <text x="460" y="272" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">Services loaded via importlib from llm-user-prompt.py path</text>
+</svg>

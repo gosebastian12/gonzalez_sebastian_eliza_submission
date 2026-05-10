@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 200" role="img" aria-labelledby="tc">
+  <title id="tc">Chunk pipeline from src/backend/data_processing/chunk_and_embed.py</title>
+  <rect width="960" height="200" fill="#121923"/>
+  <text x="480" y="26" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="12" text-anchor="middle">build_documents_for_report()</text>
+  <g font-family="Segoe UI,system-ui,sans-serif" font-size="12">
+    <rect x="24" y="48" width="120" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+    <text x="84" y="74" fill="#e8eef7" text-anchor="middle">strip_preface</text>
+    <rect x="164" y="48" width="120" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+    <text x="224" y="74" fill="#e8eef7" text-anchor="middle">normalize</text>
+    <rect x="304" y="48" width="140" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+    <text x="374" y="74" fill="#e8eef7" text-anchor="middle">split_into_sections</text>
+    <rect x="464" y="48" width="140" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+    <text x="534" y="74" fill="#e8eef7" text-anchor="middle">split_tables_and_text</text>
+    <rect x="624" y="48" width="140" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
+    <text x="694" y="74" fill="#e8eef7" text-anchor="middle">split_semantic_text</text>
+    <rect x="784" y="48" width="152" height="44" rx="6" fill="#1a2436" stroke="#263042" stroke-width="2"/>
+    <text x="860" y="74" fill="#e8eef7" text-anchor="middle">split_with_overlap</text>
+  </g>
+  <path d="M144 70 L164 70 M284 70 L304 70 M444 70 L464 70 M604 70 L624 70 M764 70 L784 70" stroke="#3d8bfd" stroke-width="2"/>
+  <polygon points="154,66 164,70 154,74" fill="#3d8bfd"/>
+  <polygon points="294,66 304,70 294,74" fill="#3d8bfd"/>
+  <polygon points="454,66 464,70 454,74" fill="#3d8bfd"/>
+  <polygon points="614,66 624,70 614,74" fill="#3d8bfd"/>
+  <polygon points="774,66 784,70 774,74" fill="#3d8bfd"/>
+  <text x="480" y="130" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">Per chunk: metadata from extract_header_metadata + section_title, chunk_index, chunk_type (text|table)</text>
+  <text x="480" y="154" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">CLI defaults: --max-chars 800, --overlap-chars 100 (--corpus-dir globs *_full.txt)</text>
+  <text x="480" y="178" fill="#8b9bb4" font-family="Consolas,monospace" font-size="11" text-anchor="middle">ingest_documents -&gt; Chroma batches via LangChain Chroma.add_documents</text>
+</svg>

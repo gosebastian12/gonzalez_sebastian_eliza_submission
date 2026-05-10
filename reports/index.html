@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>EDGAR Hybrid RAG — Technical briefing (draft)</title>
+    <title>EDGAR Hybrid RAG — Technical briefing</title>
     <style>
       :root {
         --bg: #0c1117;
@@ -79,7 +79,6 @@
         text-transform: none;
       }
 
-      /* Title slide */
       .slide-title .slide-inner {
         flex: 1;
         display: flex;
@@ -99,7 +98,7 @@
 
       .slide-title .subtitle {
         margin: 0 auto;
-        max-width: 36ch;
+        max-width: 42ch;
         font-size: clamp(1rem, 2vw, 1.25rem);
         color: var(--muted);
         font-weight: 400;
@@ -124,58 +123,231 @@
         font-weight: 600;
       }
 
-      /* Blank / placeholder slides */
-      .slide-blank .slide-inner {
+      .slide-content .slide-inner {
         flex: 1;
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        padding-top: 2rem;
+        justify-content: flex-start;
+        text-align: left;
+        padding-top: 2.6rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+        min-height: 0;
       }
 
-      .slide-blank .placeholder-label {
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: var(--accent);
-        margin-bottom: 0.75rem;
-      }
-
-      .slide-blank h2 {
-        margin: 0 0 1rem;
-        font-size: clamp(1.35rem, 3vw, 2rem);
+      .slide-content h2.slide-heading {
+        margin: 0 0 0.45rem;
+        font-size: clamp(1.15rem, 2.4vw, 1.5rem);
         font-weight: 600;
-        color: var(--muted);
+        color: var(--text);
+        letter-spacing: -0.02em;
       }
 
-      .slide-blank .placeholder-lines {
+      .slide-lede {
+        margin: 0 0 0.55rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+        line-height: 1.45;
+        max-width: 95%;
+      }
+
+      .slide-bullets {
+        margin: 0;
+        padding-left: 1.1rem;
+        font-size: 0.78rem;
+        line-height: 1.38;
+        color: var(--text);
+      }
+
+      .slide-bullets li {
+        margin-bottom: 0.28rem;
+      }
+
+      .slide-bullets strong {
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      .slide-bullets code {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        background: #0c1117;
+        padding: 0.06rem 0.28rem;
+        border-radius: 3px;
+        color: #c8d7f0;
+      }
+
+      .slide-diagram {
+        display: block;
+        margin: 0.25rem auto 0.35rem;
+        max-height: clamp(140px, 22vh, 220px);
+        width: auto;
+        max-width: 100%;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #121923;
+        cursor: zoom-in;
+      }
+
+      .slide-architecture h2.slide-heading {
+        font-size: clamp(1.35rem, 2.85vw, 1.95rem);
+      }
+
+      .slide-architecture .slide-lede {
+        font-size: 0.95rem;
+        line-height: 1.52;
+      }
+
+      .slide-architecture .slide-bullets {
+        font-size: 0.95rem;
+        line-height: 1.46;
+      }
+
+      .slide-architecture .slide-bullets li {
+        margin-bottom: 0.36rem;
+      }
+
+      .slide-architecture .slide-bullets code {
+        font-size: 0.84rem;
+      }
+
+      .slide-architecture .slide-foot {
+        font-size: 0.78rem;
+      }
+
+      .slide-architecture .slide-diagram {
+        max-height: clamp(200px, 36vh, 320px);
+        max-width: min(100%, 980px);
+      }
+
+      .slide-chunking h2.slide-heading {
+        font-size: clamp(1.35rem, 2.85vw, 1.95rem);
+      }
+
+      .slide-chunking .slide-lede {
+        font-size: 0.95rem;
+        line-height: 1.52;
+      }
+
+      .slide-chunking .slide-bullets {
+        font-size: 0.95rem;
+        line-height: 1.46;
+      }
+
+      .slide-chunking .slide-bullets li {
+        margin-bottom: 0.36rem;
+      }
+
+      .slide-chunking .slide-bullets code {
+        font-size: 0.84rem;
+      }
+
+      .slide-chunking .slide-foot {
+        font-size: 0.78rem;
+      }
+
+      .slide-chunking .slide-diagram {
+        max-height: clamp(200px, 36vh, 320px);
+        max-width: min(100%, 980px);
+      }
+
+      .diagram-lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: clamp(16px, 4vw, 48px);
+        background: rgba(6, 10, 16, 0.94);
+        backdrop-filter: blur(6px);
+      }
+
+      .diagram-lightbox[hidden] {
+        display: none;
+      }
+
+      .diagram-lightbox-img {
+        max-width: min(96vw, 1400px);
+        max-height: calc(100vh - clamp(32px, 8vw, 96px));
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+        background: #121923;
+      }
+
+      .diagram-lightbox-close {
+        position: fixed;
+        top: clamp(12px, 2.5vw, 28px);
+        right: clamp(12px, 2.5vw, 28px);
+        z-index: 201;
+        width: 44px;
+        height: 44px;
         margin: 0;
         padding: 0;
-        list-style: none;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg-slide);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 1.5rem;
+        font-weight: 300;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      .slide-blank .placeholder-lines li {
-        height: 10px;
-        background: var(--border);
-        border-radius: 4px;
-        margin-bottom: 14px;
-        opacity: 0.55;
+      .diagram-lightbox-close:hover {
+        background: #1a2436;
+        border-color: var(--accent);
+        color: var(--accent);
       }
 
-      .slide-blank .placeholder-lines li:nth-child(1) {
-        width: 92%;
-      }
-      .slide-blank .placeholder-lines li:nth-child(2) {
-        width: 78%;
-      }
-      .slide-blank .placeholder-lines li:nth-child(3) {
-        width: 85%;
-      }
-      .slide-blank .placeholder-lines li:nth-child(4) {
-        width: 64%;
+      .diagram-lightbox-close:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
-      /* HUD */
+      .slide-foot {
+        margin-top: auto;
+        padding-top: 0.35rem;
+        font-size: 0.65rem;
+        font-family: var(--font-mono);
+        color: var(--muted);
+        line-height: 1.35;
+      }
+
+      .slide-content.slide-text-only h2.slide-heading {
+        font-size: clamp(1.35rem, 2.75vw, 1.85rem);
+      }
+
+      .slide-content.slide-text-only .slide-lede {
+        font-size: 0.92rem;
+        line-height: 1.52;
+      }
+
+      .slide-content.slide-text-only .slide-bullets {
+        font-size: 0.92rem;
+        line-height: 1.48;
+      }
+
+      .slide-content.slide-text-only .slide-bullets li {
+        margin-bottom: 0.38rem;
+      }
+
+      .slide-content.slide-text-only .slide-bullets code {
+        font-size: 0.82rem;
+      }
+
+      .slide-content.slide-text-only .slide-foot {
+        font-size: 0.76rem;
+      }
+
       .hud {
         position: fixed;
         bottom: 14px;
@@ -217,6 +389,9 @@
         .hud {
           display: none;
         }
+        .diagram-lightbox {
+          display: none !important;
+        }
         .slide {
           display: flex !important;
           page-break-after: always;
@@ -230,16 +405,17 @@
   </head>
   <body>
     <div class="deck" id="deck">
-      <!-- Slide 1: Title -->
+      <!-- 1 Title -->
       <section class="slide slide-title active" aria-label="Title slide">
         <div class="slide-brand">
           <span>Technical briefing</span>
-          <span>0</span>
+          <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h1>RAG System for SEC EDGAR Filings</h1>
+          <h1>RAG system for SEC EDGAR filings</h1>
           <p class="subtitle">
-            Architecture, retrieval pipeline, and evaluation findings for SEC filing–grounded Q&amp;A.
+            Retrieval-augmented Q&amp;A over chunked filing text: metadata-filtered Chroma search,
+            lexical reranking, Ollama generation (see <code style="font-size: 0.85em">src/</code>).
           </p>
           <div class="rule" aria-hidden="true"></div>
           <p class="meta">
@@ -248,157 +424,271 @@
         </div>
       </section>
 
-      <!-- Slides 2–12: Blank placeholders (content TBD) -->
-      <section class="slide slide-blank" aria-label="Slide 2 placeholder">
+      <!-- 2 Agenda -->
+      <section class="slide slide-content slide-text-only" aria-label="Agenda">
         <div class="slide-brand">
           <span>Agenda / outline</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Agenda</h2>
+          <p class="slide-lede">
+            Slide headers mirror repository concerns; content cites concrete modules and behavior only.
+          </p>
+          <ul class="slide-bullets">
+            <li><strong>SEC EDGAR filings summary</strong> — corpus file shape and metadata extraction in ingestion.</li>
+            <li><strong>System architecture</strong> — FastAPI entrypoint, threadpool call into <code>EdgarHybridRAG</code>.</li>
+            <li><strong>Chunking, embedding &amp; ingestion</strong> — <code>chunk_and_embed.py</code> pipeline into Chroma.</li>
+            <li><strong>Retrieval &amp; reranking</strong> — <code>retrieve()</code>, <code>edgar_query_patterns.py</code>, <code>rag_reranking.py</code>.</li>
+            <li><strong>Generation &amp; UI</strong> — <code>rag_prompts.py</code>, LangChain chat chain, Jinja chat template.</li>
+            <li><strong>Testing approach</strong> — configurable runtime via env-backed <code>RAGConfig</code>; CLI entry exists.</li>
+            <li><strong>Findings</strong> — notable branching / safeguards implemented in code paths.</li>
+            <li><strong>Limitations</strong> — caps and gates enforced by config and models.</li>
           </ul>
+          <p class="slide-foot">Slides follow headers in this deck only; no claims beyond referenced files.</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 3 placeholder">
+      <!-- 3 SEC EDGAR filings summary -->
+      <section class="slide slide-content slide-text-only" aria-label="SEC filings corpus">
         <div class="slide-brand">
-          <span>SEC EDGAR Filings Summary</span>
+          <span>SEC EDGAR filings summary</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Corpus inputs &amp; filing headers</h2>
+          <p class="slide-lede">
+            Ingestion assumes plain-text exports matching <code>*_full.txt</code>; logic lives in
+            <code>src/backend/data_processing/chunk_and_embed.py</code>.
+          </p>
+          <ul class="slide-bullets">
+            <li>
+              <strong>Preface strip:</strong> if <code>SEC_REPORT_START_RE</code> matches
+              “UNITED STATES SECURITIES AND EXCHANGE COMMISSION”, body chunking starts there via
+              <code>strip_preface_noise</code>; otherwise the whole file is used.
+            </li>
+            <li>
+              <strong>Header metadata:</strong> first lines before <code>===</code> are scanned with keys mapped to
+              <code>company</code>, <code>ticker</code>, <code>filing_type</code>, <code>filing_date</code>,
+              <code>report_period</code>, <code>quarter</code>, <code>cik</code>, <code>source</code>. Missing ticker/type fall back to parsing the filename pattern
+              <code>ticker_form_quarter_filingdate_*</code>.
+            </li>
+            <li>
+              <strong><code>form_type</code>:</strong> copied from <code>filing_type</code> for downstream metadata (matches stored ingestion strings such as
+              “10-K (Annual Report)” / “10-Q (Quarterly Report)” — see <code>extract_header_metadata</code>).
+            </li>
+            <li>
+              <strong><code>SYSTEM_PROMPT</code></strong> in <code>rag_prompts.py</code> tells the model context comes from 10-Q and 10-K filing text (wording as defined in that constant).
+            </li>
           </ul>
+          <p class="slide-foot">
+            Default corpus dir: <code>DEFAULT_CORPUS_DIR</code> = repo root / <code>edgar_corpus</code> (resolved via Path.parents from chunk_and_embed.py); override with <code>--corpus-dir</code>.
+          </p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 4 placeholder">
+      <!-- 4 System architecture -->
+      <section class="slide slide-content slide-architecture" aria-label="Architecture">
         <div class="slide-brand">
-          <span>System Architecture</span>
+          <span>System architecture</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Runtime architecture</h2>
+          <p class="slide-lede">
+            Browser submits <code>POST /chat</code>; FastAPI runs <code>EdgarHybridRAG.answer</code> inside <code>run_in_threadpool</code>.
+          </p>
+          <img
+            class="slide-diagram"
+            src="./diagram-architecture.svg"
+            alt="Browser to FastAPI to EdgarHybridRAG to Chroma and Ollama"
+            width="920"
+            height="320"
+          />
+          <ul class="slide-bullets">
+            <li><strong>Module load:</strong> <code>main.py</code> resolves <code>llm-user-prompt.py</code> and imports via <code>importlib</code>; inserts services dir on <code>sys.path</code>.</li>
+            <li><strong>Config reload:</strong> fingerprint from <code>dataclasses.asdict(RAGConfig.from_env())</code>; new <code>EdgarHybridRAG</code> when fingerprint changes.</li>
+            <li><strong>Services:</strong> LangChain <code>Chroma</code> with host/port + collection; <code>OllamaEmbeddings</code> + <code>ChatOllama</code> with <code>num_predict</code>, <code>num_ctx</code>, timeouts.</li>
           </ul>
+          <p class="slide-foot">Source: src/frontend/main.py, src/backend/services/edgar_hybrid_rag.py, src/backend/services/llm-user-prompt.py</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 5 placeholder">
+      <!-- 5 Chunking embedding ingestion -->
+      <section class="slide slide-content slide-chunking" aria-label="Chunking">
         <div class="slide-brand">
-          <span>Chunking, Embedding &amp; Ingestion</span>
+          <span>Chunking, embedding &amp; ingestion</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Multi-stage chunking pipeline</h2>
+          <p class="slide-lede"><code>build_documents_for_report()</code> builds LangChain <code>Document</code> rows before embedding.</p>
+          <img
+            class="slide-diagram"
+            src="./diagram-chunking.svg"
+            alt="Chunk stages strip preface normalize sections tables semantic overlap"
+            width="960"
+            height="200"
+          />
+          <ul class="slide-bullets">
+            <li><strong>Sections:</strong> <code>split_into_sections</code> splits on <code>HEADING_RE</code> (PART / ITEM lines).</li>
+            <li><strong>Tables vs prose:</strong> <code>split_tables_and_text</code> tags blocks as <code>table</code> or <code>text</code> using pipe/heuristic line detection.</li>
+            <li><strong>Text grouping:</strong> <code>split_semantic_text</code> groups paragraphs; subheadings from <code>SUBHEADING_RE</code> start new units.</li>
+            <li><strong>Length cap:</strong> <code>split_with_overlap</code> enforces <code>max_chars</code> / <code>overlap_chars</code> (CLI defaults 800 / 100).</li>
+            <li><strong>Ingest:</strong> <code>ingest_documents</code> batches embeddings through Ollama and <code>Chroma.add_documents</code>; optional skip by deterministic chunk id.</li>
           </ul>
+          <p class="slide-foot">Source: src/backend/data_processing/chunk_and_embed.py</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 6 placeholder">
+      <!-- 6 Retrieval reranking -->
+      <section class="slide slide-content" aria-label="Retrieval">
         <div class="slide-brand">
-          <span>Retrieval &amp; Reranking</span>
+          <span>Retrieval &amp; reranking</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Hybrid retrieval then reorder</h2>
+          <img
+            class="slide-diagram"
+            src="./diagram-retrieval.svg"
+            alt="Chroma where clause embed query multi ticker branch rerank final k"
+            width="900"
+            height="380"
+          />
+          <ul class="slide-bullets">
+            <li>
+              <strong>Where clause:</strong> <code>build_chroma_where_clause</code> merges regex-derived filters (form, quarter, ISO date) with tickers from
+              <code>extract_tickers_for_retrieval</code> (name map + filtered <code>TICKER_RE</code>). Multiple tickers become <code>$or</code>; <code>form_type_metadata_clause</code> expands
+              normalized 10-K / 10-Q to stored variants.
+            </li>
+            <li>
+              <strong>Multi-company:</strong> when <code>len(extract_tickers_for_retrieval) &gt;= 2</code>, each ticker runs <code>similarity_search_by_vector</code> with
+              <code>build_chroma_where_clause_for_ticker</code> and per-ticker <code>k</code> derived from <code>semantic_k</code> and <code>multi_entity_per_ticker_semantic_k</code>; pools merge then dedupe.
+            </li>
+            <li><strong>Fallback:</strong> empty filtered search retries with combined <code>chroma_where</code>, then unfiltered search if still empty.</li>
+            <li>
+              <strong>Dedupe key:</strong> <code>file_name :: chunk_index :: section_title</code> (<code>document_identity_key</code>).
+            </li>
+            <li>
+              <strong>Rerank:</strong> <code>rerank_lexical_then_recency</code> sorts by substantive flag, keyword/metadata score, <code>log1p(length)*length_log_weight</code>, then recency unless
+              <code>query_pins_specific_period</code> or <code>disable_recency_boost</code>.
+            </li>
+            <li>
+              <strong>Optional LLM rerank:</strong> if <code>use_reranker</code>, <code>rerank_with_llm</code> scores first <code>rerank_top_n</code> docs using snippet <code>[:1500]</code> chars and JSON score parse.
+            </li>
+            <li><strong>Return slice:</strong> <code>reranked[:final_k]</code>.</li>
           </ul>
+          <p class="slide-foot">Source: edgar_hybrid_rag.py, edgar_query_patterns.py, rag_reranking.py, rag_config.py</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 8 placeholder">
+      <!-- 7 Generation UI -->
+      <section class="slide slide-content slide-text-only" aria-label="Generation UI">
         <div class="slide-brand">
           <span>Generation &amp; UI</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Prompt assembly &amp; chat UI</h2>
+          <ul class="slide-bullets">
+            <li>
+              <strong>System:</strong> <code>SYSTEM_PROMPT</code> constant from <code>rag_prompts.py</code> (exact wording including filing/tabular guidance as in source).
+            </li>
+            <li>
+              <strong>Human template:</strong> <code>ChatPromptTemplate.from_messages</code> in <code>answer()</code> inserts user question plus <code>build_retrieval_context(...)</code> output with fixed instruction strings after context.
+            </li>
+            <li>
+              <strong>Context budget:</strong> <code>effective_context_char_budget</code> derives a hard character cap from <code>num_ctx</code>, <code>num_predict</code>, overhead estimate; <code>max_context_chars</code> also clamps. Builder concatenates chunk headers (ticker, form, file, section, …) and bodies; truncates per chunk when needed with continuation per implementation.
+            </li>
+            <li>
+              <strong>API payload:</strong> <code>answer</code>, <code>sources</code>, <code>source_chunks</code>, <code>metadata_filters_used</code>, <code>retrieval_where_clause</code>,
+              <code>retrieved_count</code>, <code>sources_count</code>, <code>period_pinned_in_query</code>.
+            </li>
+            <li>
+              <strong>UI:</strong> <code>chat.html</code> renders <code>message.content</code> without length truncation; Sources list when <code>source_chunks</code> is defined post-success. Timeout via <code>RAG_HTTP_TIMEOUT</code> + <code>asyncio.wait_for</code>.
+            </li>
           </ul>
+          <p class="slide-foot">Source: rag_prompts.py, edgar_hybrid_rag.py, rag_context.py, src/frontend/templates/chat.html, main.py</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 10 placeholder">
+      <!-- 8 Testing -->
+      <section class="slide slide-content slide-text-only" aria-label="Testing">
         <div class="slide-brand">
-          <span>Testing Approach</span>
+          <span>Testing approach</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">How runs are configured &amp; exercised</h2>
+          <ul class="slide-bullets">
+            <li><strong>Web UI:</strong> manual prompts through FastAPI form POST to <code>/chat</code>; same path calls <code>rag.answer</code>.</li>
+            <li>
+              <strong>Environment knobs:</strong> <code>RAGConfig.from_env()</code> reads variables documented in <code>rag_config.py</code> (e.g. <code>RAG_SEMANTIC_K</code>, <code>RAG_FINAL_K</code>,
+              <code>RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K</code>, <code>RAG_USE_RERANKER</code>, <code>RAG_NUM_PREDICT</code>, <code>RAG_NUM_CTX</code>, collection/host/port, models).
+            </li>
+            <li><strong>CLI:</strong> <code>llm-user-prompt.py</code> exposes <code>--query</code>, collection/chroma flags, <code>--semantic-k</code>, <code>--final-k</code>, <code>--use-reranker</code> merged via <code>dataclasses.replace(RAGConfig.from_env(), …)</code>.</li>
+            <li><strong>Optional dotenv:</strong> <code>main.py</code> calls <code>load_dotenv()</code> when <code>python-dotenv</code> is installed.</li>
           </ul>
+          <p class="slide-foot">Automated test harness not present under src/ for this deck; manual/Q&amp;A prompts tracked separately by maintainers.</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 11 placeholder">
+      <!-- 9 Findings -->
+      <section class="slide slide-content slide-text-only" aria-label="Findings">
         <div class="slide-brand">
           <span>Findings</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Behavior encoded in source (selected)</h2>
+          <p class="slide-lede">Listed items are direct consequences of implemented branches—not benchmark scores.</p>
+          <ul class="slide-bullets">
+            <li><strong>Issuer coverage control:</strong> multi-ticker questions trigger isolated filtered searches per symbol before pooling (addresses embedding dominance in a union).</li>
+            <li><strong>Graceful degradation:</strong> metadata-only filters that yield zero hits fall back to wider then unfiltered vector queries.</li>
+            <li><strong>Ticker hygiene:</strong> single-letter <code>TICKER_RE</code> matches excluded from <code>extract_metadata_filters</code> (<code>len(t)&gt;=2</code>); shared <code>FALSE_TICKER_WORDS</code> filters noisy uppercase tokens.</li>
+            <li><strong>Query normalization:</strong> <code>normalize_query_text</code> (NFKC + curly apostrophe flattening) feeds alias resolution and rerank keyword alignment.</li>
+            <li><strong>Chunk sourcing:</strong> UI attaches <code>source_chunks</code> mirroring retrieved docs; empty retrieval surfaces explicit Sources placeholder copy in template.</li>
           </ul>
+          <p class="slide-foot">Maps to edgar_hybrid_rag.py, edgar_query_patterns.py, rag_reranking.py, chat.html, main.py</p>
         </div>
       </section>
 
-      <section class="slide slide-blank" aria-label="Slide 12 placeholder">
+      <!-- 10 Limitations -->
+      <section class="slide slide-content slide-text-only" aria-label="Limitations">
         <div class="slide-brand">
-          <span>Limitations &amp; Future Improvements</span>
+          <span>Limitations &amp; future improvements</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <p class="placeholder-label">Placeholder</p>
-          <h2>Slide title TBD</h2>
-          <ul class="placeholder-lines">
-            <li></li>
-            <li></li>
-            <li></li>
-            <li></li>
+          <h2 class="slide-heading">Limits enforced by current code</h2>
+          <ul class="slide-bullets">
+            <li><strong>Generation length:</strong> Ollama <code>num_predict</code> caps completion tokens; answers truncate when budget exhausted mid-stream.</li>
+            <li><strong>Context window math:</strong> <code>RAGConfig.normalized()</code> clamps <code>num_predict</code> vs overhead/token slack assumptions documented in that method.</li>
+            <li><strong>Retrieval breadth:</strong> candidate pool bounded by <code>semantic_k</code> / per-ticker analogues; final list capped by <code>final_k</code>.</li>
+            <li><strong>LLM rerank scope:</strong> scoring invoked only for prefix length <code>rerank_top_n</code>; tail retains lexical order.</li>
+            <li><strong>Infrastructure coupling:</strong> runtime depends on reachable Chroma HTTP API and Ollama models configured via env defaults in <code>RAGConfig</code>.</li>
+            <li><strong>SYSTEM_PROMPT body:</strong> trailing separator snippet exists verbatim inside <code>rag_prompts.py</code> constant—review if unintended for production prompts.</li>
           </ul>
+          <p class="slide-foot">Future work is out of scope for this deck unless merged into src/</p>
+        </div>
+      </section>
+
+      <!-- 11 Q&A -->
+      <section class="slide slide-title" aria-label="Questions">
+        <div class="slide-brand">
+          <span>Discussion</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <h1>Questions?</h1>
+          <p class="subtitle">
+            Architecture, retrieval filters, chunking/ingestion flags, Ollama/Chroma configuration, UI wiring, or evaluation methodology—please challenge assumptions grounded in the codebase paths cited earlier.
+          </p>
+          <div class="rule" aria-hidden="true"></div>
+          <p class="meta">
+            <strong>Thank you</strong> — Reference implementation under <code>src/backend/services/</code> and <code>src/frontend/</code>
+          </p>
         </div>
       </section>
     </div>
@@ -409,11 +699,26 @@
       <span class="counter" id="slideCounter"></span>
     </div>
 
+    <div
+      id="diagramLightbox"
+      class="diagram-lightbox"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-label="Expanded diagram"
+    >
+      <button type="button" class="diagram-lightbox-close" aria-label="Close expanded diagram">×</button>
+      <img class="diagram-lightbox-img" alt="" decoding="async" />
+    </div>
+
     <script>
       (function () {
         var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
         var idx = 0;
         var counter = document.getElementById("slideCounter");
+        var lightbox = document.getElementById("diagramLightbox");
+        var lightboxImg = lightbox.querySelector(".diagram-lightbox-img");
+        var lightboxClose = lightbox.querySelector(".diagram-lightbox-close");
 
         function fillSlideNums() {
           slides.forEach(function (slide, i) {
@@ -434,7 +739,49 @@
           counter.textContent = idx + 1 + " / " + slides.length;
         }
 
+        function diagramLightboxOpen() {
+          return !lightbox.hasAttribute("hidden");
+        }
+
+        function closeDiagramLightbox() {
+          lightbox.setAttribute("hidden", "");
+          document.body.style.overflow = "";
+          lightboxImg.removeAttribute("src");
+          lightboxImg.alt = "";
+        }
+
+        function openDiagramLightbox(img) {
+          lightboxImg.src = img.currentSrc || img.src;
+          lightboxImg.alt = img.alt || "";
+          lightbox.removeAttribute("hidden");
+          document.body.style.overflow = "hidden";
+          lightboxClose.focus();
+        }
+
+        Array.prototype.forEach.call(document.querySelectorAll(".slide-diagram"), function (img) {
+          img.addEventListener("click", function () {
+            openDiagramLightbox(img);
+          });
+        });
+
+        lightboxClose.addEventListener("click", function () {
+          closeDiagramLightbox();
+        });
+
+        lightbox.addEventListener("click", function (e) {
+          if (e.target === lightbox) {
+            closeDiagramLightbox();
+          }
+        });
+
         document.addEventListener("keydown", function (e) {
+          if (diagramLightboxOpen()) {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              closeDiagramLightbox();
+            }
+            return;
+          }
           if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
             e.preventDefault();
             show(idx + 1);
