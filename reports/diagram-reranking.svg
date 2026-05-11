@@ -82,8 +82,8 @@
     <rect x="0" y="32" width="90" height="6" rx="2" fill="#1a2436" stroke="#263042"/>
   </g>
   <text x="338" y="618" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="11" font-weight="600" text-anchor="middle">Model-assisted resort</text>
-  <text x="338" y="644" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Brief excerpt from each leading chunk is judged for relevance</text>
-  <text x="338" y="664" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Top of the list is reshuffled; the rest keeps the rule order</text>
+  <text x="338" y="644" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Brief except from each chunk is judged for relevance by an LLM.</text>
+  <text x="338" y="664" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Keep top 'N' results.</text>
   <text x="338" y="688" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="9" text-anchor="middle">Only a capped prefix is rescored for speed</text>
 
   <rect x="772" y="568" width="580" height="100" rx="12" fill="#0c1117" stroke="#3d8bfd" stroke-width="1.5"/>

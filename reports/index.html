@@ -702,7 +702,7 @@
                 </li>
                 <li>
                   <span class="scenario-label">JPMorgan CET1 ratio.</span>
-                  Exercises a narrow numeric readout on a single ticker (no extra behavior logged in the catalog).
+                  Exercises a narrow numeric readout on a single ticker using retrieved Tabular data.
                 </li>
               </ul>
             </li>
@@ -711,7 +711,7 @@
               <ul>
                 <li>
                   <span class="scenario-label">Vague pharma regulatory risks.</span>
-                  Broad sector ask; catalogued as a multi-entity stress case (no specific failure note in the doc).
+                  Broad sector ask; retrieved chunks for all four pharmaceutical companies in the corpus.
                 </li>
                 <li>
                   <span class="scenario-label">Apple vs Tesla vs JPMorgan risk comparison.</span>
@@ -724,11 +724,11 @@
               <ul>
                 <li>
                   <span class="scenario-label">NVDA data-center commentary, 2024Q3 pinned.</span>
-                  <strong>Observed:</strong> every chunk traced to NVDA 2024Q3 10-Q—quarter filter held.
+                  Every retrieved chunk traced to NVDA 2024Q3 10-Q—quarter filter held.
                 </li>
                 <li>
                   <span class="scenario-label">META trend analysis, &quot;10-K / annual only&quot; in the prompt.</span>
-                  <strong>Observed:</strong> chunks spanned annual reports present in the vector DB (per log: 2025 10-K not in corpus).
+                  Chunks spanned annual reports present in the vector DB (specifically 2026 and 2024 10-K's, 2025 10-K not in corpus).
                 </li>
               </ul>
             </li>
@@ -742,6 +742,10 @@
                 <li>
                   <span class="scenario-label">Fabricated divestiture (Google 10-Q / Pixel sold to Meta).</span>
                   <strong>Observed:</strong> answer did not use retrieved text to correct the false premise; retrieved chunks skewed to Meta only.
+                </li>
+                <li>
+                  <span class="scenario-label">Extremely long user question about AAPL, JPM, META, MRK, NVDA, and more.</span>
+                  <strong>Observed:</strong> Model response was short and truncated due to the large number of tokens in the user question. Only AAPL chunks were retrieved. Response generation time increased to ~30 seconds.
                 </li>
               </ul>
             </li>
