@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""Chunk SEC EDGAR ``*_full.txt`` reports and ingest LangChain ``Document`` rows into Chroma.
+
+Stages: read text, ``extract_header_metadata``, strip boilerplate before the SEC cover, normalize
+line breaks, split on PART/ITEM headings, separate pipe-heavy tables from prose, group prose
+semantically, enforce ``max_chars`` / ``overlap_chars``, compute stable ``chunk_id`` values, then
+batch-embed via Ollama and upsert into a Chroma HTTP collection (see ``parse_args`` / ``main``).
+"""
+
 import argparse
 import hashlib
 import json
@@ -14,7 +22,6 @@ from typing import Iterable
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
-
 
 SEC_REPORT_START_RE = re.compile(
     r"UNITED STATES\s*SECURITIES AND EXCHANGE COMMISSION",
@@ -35,11 +42,25 @@ DEFAULT_CORPUS_DIR = REPO_ROOT.parent / "edgar_corpus"
 
 @dataclass
 class SectionBlock:
+    """One section of a filing after ``split_into_sections``.
+
+    Attributes:
+        title: PART/ITEM heading line, or ``DOCUMENT_START`` for leading material.
+        content: Body text belonging to this section until the next heading match.
+    """
+
     title: str
     content: str
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI flags for corpus path, chunk sizes, Chroma target, and ingest behavior.
+
+    Returns:
+        Namespace with ``--corpus-dir``, ``--glob``, ``--collection``, embedding/Chroma options,
+        ``--max-chars``, ``--overlap-chars``, ``--limit-files``, ``--dry-run``, ``--batch-size``,
+        and ``--skip-existing`` (see ``main`` for how each is used).
+    """
     parser = argparse.ArgumentParser(
         description="Chunk SEC EDGAR filings and ingest them into Chroma with LangChain."
     )
@@ -104,10 +125,29 @@ def parse_args() -> argparse.Namespace:
 
 
 def read_report(path: Path) -> str:
+    """Read a single report file as Unicode text, ignoring decode errors.
+
+    Args:
+        path: Path to a ``*_full.txt`` (or other) text file.
+
+    Returns:
+        Full file contents as ``str``.
+    """
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
 def extract_header_metadata(raw_text: str, filename: str) -> dict[str, str]:
+    """Parse leading key:value header lines and merge filename-derived fallbacks.
+
+    Args:
+        raw_text: Full report text (only the first ~40 lines are scanned before ``===`` break).
+        filename: Basename used as ``file_name`` and for ``TICKER_FORM_...`` token fallback when
+            header lacks ticker or filing type.
+
+    Returns:
+        Metadata dict with keys such as ``company``, ``ticker``, ``filing_type`` / ``form_type``,
+        ``filing_date``, ``quarter``, ``report_period``, etc., always including ``file_name``.
+    """
     metadata: dict[str, str] = {"file_name": filename}
     allowed = {
         "company": "company",
@@ -150,6 +190,14 @@ def extract_header_metadata(raw_text: str, filename: str) -> dict[str, str]:
 
 
 def strip_preface_noise(raw_text: str) -> str:
+    """Remove boilerplate before the SEC cover line when present.
+
+    Args:
+        raw_text: Full raw report string.
+
+    Returns:
+        Slice from ``UNITED STATES SECURITIES...`` onward, or ``raw_text.strip()`` if no match.
+    """
     match = SEC_REPORT_START_RE.search(raw_text)
     if match:
         return raw_text[match.start() :].strip()
@@ -157,6 +205,15 @@ def strip_preface_noise(raw_text: str) -> str:
 
 
 def normalize_for_chunking(text: str) -> str:
+    """Normalize newlines and insert soft breaks around common SEC layout markers.
+
+    Args:
+        text: Report body after ``strip_preface_noise``.
+
+    Returns:
+        Text with ``\\r`` removed, markers split onto their own lines, and `` | `` table separators
+        broken onto new lines to avoid single mega-lines.
+    """
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
 
     # These files often concatenate tokens into very long lines.
@@ -177,6 +234,14 @@ def normalize_for_chunking(text: str) -> str:
 
 
 def split_into_sections(text: str) -> list[SectionBlock]:
+    """Split normalized body text on PART/ITEM headings (``HEADING_RE``).
+
+    Args:
+        text: Filing body string (typically output of ``normalize_for_chunking``).
+
+    Returns:
+        Non-empty ``SectionBlock`` list; first section may use title ``DOCUMENT_START``.
+    """
     lines = text.splitlines()
     sections: list[SectionBlock] = []
     current_title = "DOCUMENT_START"
@@ -201,6 +266,14 @@ def split_into_sections(text: str) -> list[SectionBlock]:
 
 
 def is_table_line(line: str) -> bool:
+    """Heuristic: whether a line is part of a pipe table or dense numeric row.
+
+    Args:
+        line: Single text line.
+
+    Returns:
+        ``True`` if pipes are present or many numeric tokens appear in a short token count.
+    """
     if TABLE_LINE_RE.search(line):
         return True
     numeric_tokens = re.findall(r"[-$]?\d[\d,]*(?:\.\d+)?", line)
@@ -208,6 +281,15 @@ def is_table_line(line: str) -> bool:
 
 
 def split_tables_and_text(section: SectionBlock) -> list[tuple[str, str]]:
+    """Partition one section into alternating ``("text", ...)`` and ``("table", ...)`` blocks.
+
+    Args:
+        section: ``SectionBlock`` with ``content`` lines.
+
+    Returns:
+        List of ``(chunk_type, text)`` pairs with ``chunk_type`` in ``{"text","table"}``, skipping
+        empty strings.
+    """
     lines = section.content.splitlines()
     chunks: list[tuple[str, str]] = []
     i = 0
@@ -249,6 +331,14 @@ def split_tables_and_text(section: SectionBlock) -> list[tuple[str, str]]:
 
 
 def split_semantic_text(text: str) -> list[str]:
+    """Group prose paragraphs, starting a new group when a subheading pattern matches.
+
+    Args:
+        text: Prose ``page_content`` candidate (non-table branch).
+
+    Returns:
+        List of paragraph groups; never returns empty list when ``text`` is non-empty after strip.
+    """
     blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
     if not blocks:
         return [text.strip()] if text.strip() else []
@@ -271,6 +361,19 @@ def split_semantic_text(text: str) -> list[str]:
 
 
 def split_with_overlap(text: str, max_chars: int, overlap_chars: int) -> list[str]:
+    """Split long text into <= ``max_chars`` chunks with ``overlap_chars`` carry between parts.
+
+    Prefers breaking on newlines, then spaces, before hard cutting.
+
+    Args:
+        text: Source string (often one semantic prose unit).
+        max_chars: Maximum characters per emitted chunk.
+        overlap_chars: Characters repeated from the end of the previous chunk at the start of the
+            next window (keeps embedding context continuous).
+
+    Returns:
+        List of non-empty chunk strings; empty input yields ``[]``.
+    """
     text = text.strip()
     if not text:
         return []
@@ -304,6 +407,17 @@ def build_documents_for_report(
     max_chars: int,
     overlap_chars: int,
 ) -> list[Document]:
+    """Run the full chunking pipeline for one on-disk report and return LangChain documents.
+
+    Args:
+        report_path: Path to a ``*_full.txt`` file under the corpus directory.
+        max_chars: ``split_with_overlap`` maximum chunk body length.
+        overlap_chars: Overlap between consecutive split pieces of the same unit.
+
+    Returns:
+        ``Document`` list with ``page_content`` slices and metadata including ``chunk_id``,
+        ``chunk_index``, ``section_title``, ``chunk_type`` (``text`` or ``table``), etc.
+    """
     raw_text = read_report(report_path)
     base_metadata = extract_header_metadata(raw_text, report_path.name)
     report_body = normalize_for_chunking(strip_preface_noise(raw_text))
@@ -337,6 +451,15 @@ def build_documents_for_report(
 
 
 def _stable_chunk_id(metadata: dict[str, str | int], content: str) -> str:
+    """Deterministic id for upserts / skip-existing logic (SHA-1 prefix of key material).
+
+    Args:
+        metadata: Must include ``file_name`` and ``chunk_index`` for uniqueness.
+        content: Chunk body; first 120 characters participate in the digest.
+
+    Returns:
+        Human-readable id string ``"{ticker}-{filing_date}-{hex}"``.
+    """
     base = (
         f"{metadata.get('file_name', '')}|"
         f"{metadata.get('chunk_index', '')}|"
@@ -348,6 +471,16 @@ def _stable_chunk_id(metadata: dict[str, str | int], content: str) -> str:
 
 
 def iter_report_paths(corpus_dir: Path, pattern: str, limit_files: int) -> Iterable[Path]:
+    """Yield sorted corpus file paths, optionally capped by ``limit_files``.
+
+    Args:
+        corpus_dir: Directory root for ``glob``.
+        pattern: Glob pattern (default ``*_full.txt`` from CLI).
+        limit_files: If ``> 0``, only the first ``limit_files`` paths after sorting.
+
+    Returns:
+        Iterable of ``Path`` objects (list materialized in ``main``).
+    """
     paths = sorted(corpus_dir.glob(pattern))
     if limit_files > 0:
         paths = paths[:limit_files]
@@ -363,6 +496,21 @@ def ingest_documents(
     batch_size: int,
     skip_existing: bool,
 ) -> None:
+    """Embed ``docs`` in batches and upsert vectors + metadata into Chroma.
+
+    Args:
+        docs: Prepared ``Document`` rows (must include ``chunk_id`` metadata for upsert ids).
+        collection: Chroma collection name.
+        embedding_model: Ollama embedding model id passed to ``OllamaEmbeddings``.
+        chroma_host: Chroma HTTP host.
+        chroma_port: Chroma HTTP port.
+        batch_size: Documents per upsert batch (must be ``> 0``).
+        skip_existing: When ``True``, pre-fetches ids and drops docs already in the collection.
+
+    Raises:
+        ValueError: If ``batch_size <= 0``.
+        RuntimeError: If Chroma heartbeat fails (see ``_assert_chroma_reachable``).
+    """
     if batch_size <= 0:
         raise ValueError("--batch-size must be greater than 0.")
 
@@ -425,6 +573,18 @@ def ingest_documents(
 
 
 def self_or_embed_documents(vectorstore: Chroma, texts: list[str]) -> list[list[float]]:
+    """Call the vectorstore's embedding function on ``texts`` (batch API).
+
+    Args:
+        vectorstore: Connected ``Chroma`` client with an embedding function configured.
+        texts: Raw chunk strings for one batch.
+
+    Returns:
+        List of embedding vectors (list of floats per text).
+
+    Raises:
+        RuntimeError: If the vectorstore has no embedding function.
+    """
     embedding_function = vectorstore._embedding_function  # noqa: SLF001
     if embedding_function is None:
         raise RuntimeError("No embedding function configured for Chroma vectorstore.")
@@ -432,6 +592,15 @@ def self_or_embed_documents(vectorstore: Chroma, texts: list[str]) -> list[list[
 
 
 def _assert_chroma_reachable(chroma_host: str, chroma_port: int) -> None:
+    """GET Chroma ``/api/v2/heartbeat`` and raise if the service is not a healthy Chroma instance.
+
+    Args:
+        chroma_host: Server hostname or IP.
+        chroma_port: HTTP port.
+
+    Raises:
+        RuntimeError: On connection failure, HTTP error, or FastAPI-style 404 (wrong service).
+    """
     base_url = f"http://{chroma_host}:{chroma_port}"
     heartbeat_url = f"{base_url}/api/v2/heartbeat"
     request = Request(heartbeat_url, method="GET")
@@ -467,6 +636,11 @@ def _assert_chroma_reachable(chroma_host: str, chroma_port: int) -> None:
 
 
 def main() -> None:
+    """CLI: chunk every matched report, optionally ingest into Chroma; print progress to stdout.
+
+    Raises:
+        FileNotFoundError: If corpus dir is missing or glob matches no files.
+    """
     args = parse_args()
     if not args.corpus_dir.exists():
         raise FileNotFoundError(f"Corpus directory not found: {args.corpus_dir}")

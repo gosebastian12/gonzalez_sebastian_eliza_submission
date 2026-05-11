@@ -34,7 +34,18 @@ METADATA_WORD_STOPWORDS = frozenset(
 
 
 def query_pins_specific_period(question: str) -> bool:
-    """True when the user narrows time (year, quarter, fiscal year, or ISO date)."""
+    """Return True when the question appears to pin a calendar or reporting period.
+
+    Used to relax recency tie-breaking so older-but-relevant quarters can surface when the user
+    names a specific window.
+
+    Args:
+        question: Raw user prompt text.
+
+    Returns:
+        ``True`` if any of ``DATE_RE``, ``QUARTER_RE``, ``FY_YEAR_RE``, ``FISCAL_YEAR_RE``, or
+        ``YEAR_RE`` matches; otherwise ``False``.
+    """
     if DATE_RE.search(question):
         return True
     if QUARTER_RE.search(question):
@@ -49,11 +60,28 @@ def query_pins_specific_period(question: str) -> bool:
 
 
 def query_content_keywords(question: str) -> list[str]:
+    """Tokenize the question into lowercase alphanumeric tokens for lexical scoring.
+
+    Args:
+        question: User prompt.
+
+    Returns:
+        Tokens of length 3+ from ``[a-zA-Z][a-zA-Z0-9.-]{2,}``, excluding ``METADATA_WORD_STOPWORDS``.
+    """
     tokens = re.findall(r"[a-zA-Z][a-zA-Z0-9.-]{2,}", question.lower())
     return [t for t in tokens if t not in METADATA_WORD_STOPWORDS]
 
 
 def _quarter_end_epoch(year: int, quarter: int) -> float:
+    """UTC end-of-month timestamp for the last day of ``quarter`` in ``year``.
+
+    Args:
+        year: Four-digit calendar year.
+        quarter: 1–4 (maps to months 3, 6, 9, 12).
+
+    Returns:
+        POSIX seconds (float) at end of last day of that quarter, UTC.
+    """
     month = quarter * 3
     last_day = monthrange(year, month)[1]
     dt = datetime(year, month, last_day, tzinfo=timezone.utc)
@@ -61,9 +89,18 @@ def _quarter_end_epoch(year: int, quarter: int) -> float:
 
 
 def report_recency_epoch(metadata: dict[str, Any]) -> float:
-    """Best-effort filing/report time for ordering (newer = larger)."""
+    """Best-effort filing/report time for ordering (newer = larger epoch).
+
+    Args:
+        metadata: Chunk metadata dict; may include ``filing_date``, ``report_period``, ``quarter``,
+            or parseable dates inside ``file_name``.
+
+    Returns:
+        UTC-based timestamp as ``float`` seconds, or ``0.0`` when no reliable signal exists.
+    """
 
     def _parse_iso_date(value: str) -> float | None:
+        """Parse ``YYYY-MM-DD`` (first 10 chars) to UTC epoch, or ``None`` if invalid."""
         value = value.strip()[:10]
         try:
             dt = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -102,26 +139,39 @@ def report_recency_epoch(metadata: dict[str, Any]) -> float:
 
 
 def chunk_body_is_substantive(text: str, min_chars: int) -> bool:
+    """Return whether ``text`` is long enough to count as substantive for sort tie-breaks.
+
+    Args:
+        text: Chunk ``page_content``.
+        min_chars: Minimum non-whitespace length; non-positive values always yield ``True``.
+
+    Returns:
+        ``True`` if ``len(text.strip()) >= min_chars`` when ``min_chars > 0``.
+    """
     if min_chars <= 0:
         return True
     return len(text.strip()) >= min_chars
 
 
 def keyword_metadata_alignment_score(doc: Document, question: str) -> float:
-    """Lexical alignment of chunk metadata (+ light body hits) with the user question."""
+    """Score how well chunk metadata (and a skim of body text) match the user question.
+
+    Args:
+        doc: Retrieved ``Document`` with ``metadata`` and ``page_content``.
+        question: Original user query (used for token extraction and form/ticker heuristics).
+
+    Returns:
+        Non-negative float; higher means stronger lexical/metadata alignment.
+    """
     meta = doc.metadata
     keywords = query_content_keywords(question)
     hay_parts = [
         str(meta.get(key, ""))
         for key in (
-            "company",
-            "ticker",
-            "form_type",
-            "quarter",
-            "report_period",
-            "filing_date",
-            "section_title",
-            "file_name",
+            "company", "ticker",
+            "form_type", "quarter",
+            "report_period", "filing_date",
+            "section_title", "file_name",
             "chunk_type",
         )
     ]
@@ -176,7 +226,23 @@ def rerank_lexical_then_recency(
     min_chunk_body_chars: int = 0,
     length_log_weight: float = 1.25,
 ) -> list[Document]:
-    """Rank by relevance, then longer chunks (more LLM-usable context), then recency."""
+    """Deterministically re-order ``docs`` before optional LLM re-ranking.
+
+    Sort key (descending): substantive body flag, ``keyword_metadata_alignment_score``,
+    ``log1p(body length) * length_log_weight``, then ``report_recency_epoch`` unless the query
+    pins a period or ``disable_recency_boost`` is set.
+
+    Args:
+        docs: Candidate chunks (e.g. Chroma semantic hits after dedupe).
+        query: User question for keyword and period detection.
+        disable_recency_boost: When ``True``, recency contributes ``0`` to the sort key (testing).
+        min_chunk_body_chars: Passed to ``chunk_body_is_substantive`` for the first sort field.
+        length_log_weight: Multiplier on ``log1p`` body length; clamped to ``>= 0``.
+
+    Returns:
+        New list sorted in place logic (does not mutate input order in CPython for sort stability
+        of a copied list); empty input yields ``[]``.
+    """
     if not docs:
         return []
     pinned = query_pins_specific_period(query)

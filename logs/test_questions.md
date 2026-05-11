@@ -21,7 +21,7 @@ Short-lived catalog of **user-style questions** used to exercise retrieval, rera
 | Prompt | Focus | Notes |
 |--------|-------|-------|
 | "How has NVIDIA's revenue and growth outlook changed over the last two years?" | General time reference, specific analysis requested | Initially, system was pulling reports from other companies. Changes resulted in only NVID reports being retrieved. |
-| "What is JPMorgan’s CET1 capital ratio?" | Request for a calculation of a specific financial metric. | - |
+| "What is JPMorgan’s CET1 capital ratio?" | Request for a calculation of a specific financial metric. | Calculations were performed with retrieved tabular data and seemed to be accurate. |
 
 ---
 
@@ -29,7 +29,7 @@ Short-lived catalog of **user-style questions** used to exercise retrieval, rera
 
 | Prompt | Focus | Notes |
 |--------|-------|-------|
-| "What regulatory risks do the major pharmaceutical companies face, and how are they addressing them?" | Vague about companies. Requesting information about past *and* future. | - |
+| "What regulatory risks do the major pharmaceutical companies face, and how are they addressing them?" | Vague about companies. Requesting information about past *and* future. | RAG system was able to retrieve chunks from all pharmaceutical companies in Corpus - MRK, PFE, JNJ, LLY. |
 | "What are the primary risk factors facing Apple, Tesla, and JPMorgan, and how do they compare?" | Specific about companies of interest. Request for comparison amongst them. | **No chunks about TSLA were retrieved. Only for AAPL and JPM.** |
 
 ---

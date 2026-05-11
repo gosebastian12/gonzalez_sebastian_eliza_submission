@@ -29,6 +29,18 @@ def estimate_k_impact(
     query_and_format_tokens: int = 780,
     context_window_tokens: int = 4096,
 ) -> dict[str, Any]:
+    """Rough token budget table for how many retrieved chunks ``k`` might fit in a window.
+
+    Used for CLI-side reporting only; does not change ``EdgarHybridRAG`` behavior.
+
+    Args:
+        avg_chunk_tokens: Assumed mean tokens per retrieved chunk body.
+        query_and_format_tokens: Reserved tokens for system + question + wrappers.
+        context_window_tokens: Total context size to model (e.g. ``num_ctx``).
+
+    Returns:
+        Dict with ``assumptions``, ``recommendations`` (per-``k`` rows), and ``suggested_default_k``.
+    """
     recommendations: list[dict[str, int]] = []
     for k in (4, 6, 8, 10):
         retrieval_tokens = k * avg_chunk_tokens
@@ -54,6 +66,14 @@ def estimate_k_impact(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI flags for ad-hoc ``EdgarHybridRAG.answer`` runs.
+
+    Returns:
+        ``argparse.Namespace`` with ``--query`` (required) and optional overrides for collection,
+        Chroma host/port, embedding and LLM model names, ``semantic_k``, ``final_k``, and
+        ``--use-reranker`` (flag). Other ``RAG_*`` settings still load from the environment via
+        ``RAGConfig.from_env()`` before ``dataclasses.replace``.
+    """
     parser = argparse.ArgumentParser(description="Hybrid retrieval + prompt injection for EDGAR RAG.")
     parser.add_argument("--query", required=True, help="User prompt text.")
     parser.add_argument("--collection", default="edgar_reports")
@@ -68,6 +88,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """CLI entry: merge flags with env-backed config, run ``rag.answer``, print JSON + timing.
+
+    Side effects: prints ``answer`` payload JSON, ``estimate_k_impact`` JSON, and elapsed seconds
+    to stdout.
+    """
     started = time.time()
     args = parse_args()
     config = replace(

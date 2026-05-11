@@ -158,7 +158,18 @@ FALSE_TICKER_WORDS: Final[frozenset[str]] = frozenset(
 
 
 def form_type_metadata_clause(form_val: str) -> dict[str, Any]:
-    """Map normalized ``10-K`` / ``10-Q`` filters to values stored during ingestion."""
+    """Map a normalized ``10-K`` / ``10-Q`` filter string to Chroma ``where`` metadata shape.
+
+    Ingestion stores several string variants per form; this expands a single user-facing label
+    into ``{"$or": [{"form_type": ...}, ...]}`` when needed.
+
+    Args:
+        form_val: Typically ``10-K`` or ``10-Q`` (spacing/case tolerant).
+
+    Returns:
+        Either ``{"form_type": raw}`` for unknown forms, or an ``{"$or": [...]}`` clause listing
+        all stored variants for that form family.
+    """
     raw = form_val.strip()
     norm = raw.upper().replace(" ", "")
     if norm == "10-K":
@@ -171,13 +182,29 @@ def form_type_metadata_clause(form_val: str) -> dict[str, Any]:
 
 
 def normalize_query_text(raw: str) -> str:
-    """Unicode-normalize and straighten apostrophes so company-name aliases match reliably."""
+    """Unicode-normalize and straighten apostrophes so company-name aliases match reliably.
+
+    Args:
+        raw: Arbitrary user input string.
+
+    Returns:
+        ``NFKC``-normalized text with curly apostrophes replaced by ASCII ``'``.
+    """
     s = unicodedata.normalize("NFKC", raw)
     return s.replace("\u2019", "'").replace("\u2018", "'")
 
 
 def _alias_matches_query(name: str, ql: str) -> bool:
-    """Avoid substring false positives (e.g. ``apple`` inside ``pineapple``)."""
+    """Return whether company alias ``name`` matches in lowercased query ``ql`` without substring traps.
+
+    Args:
+        name: Company phrase from ``COMPANY_NAME_TO_TICKER`` (already lowercased convention for
+            multi-word; single tokens use word-boundary regex).
+        ql: ``normalize_query_text(query).lower()``.
+
+    Returns:
+        ``True`` if the alias should count as present in the query.
+    """
     if not name.strip():
         return False
     if " " in name.strip():
@@ -186,7 +213,15 @@ def _alias_matches_query(name: str, ql: str) -> bool:
 
 
 def extract_tickers_for_retrieval(query: str) -> list[str]:
-    """Resolve explicit tickers plus common company names → ticker for multi-entity RAG."""
+    """Resolve explicit tickers plus known company-name aliases to symbols for multi-entity RAG.
+
+    Args:
+        query: Raw user question.
+
+    Returns:
+        Ordered unique tickers: company-name mappings first (table order), then ``TICKER_RE``
+        matches filtered by ``FALSE_TICKER_WORDS`` and minimum length 2.
+    """
     ql = normalize_query_text(query).lower()
     found: list[str] = []
     seen: set[str] = set()
@@ -208,7 +243,15 @@ def extract_tickers_for_retrieval(query: str) -> list[str]:
 
 
 def company_name_ticker_boost(question_lower: str, ticker_upper: str) -> float:
-    """Extra lexical score when the question names a company that maps to chunk metadata ticker."""
+    """Return a bonus score when the question names a company mapped to ``ticker_upper``.
+
+    Args:
+        question_lower: Already lowercased question text.
+        ticker_upper: Uppercase ticker on the chunk metadata row.
+
+    Returns:
+        ``6.0`` when an alias for that ticker matches ``question_lower``; else ``0.0``.
+    """
     if not ticker_upper.strip():
         return 0.0
     for name, sym in COMPANY_NAME_TO_TICKER:
@@ -218,7 +261,18 @@ def company_name_ticker_boost(question_lower: str, ticker_upper: str) -> float:
 
 
 def extract_metadata_filters(query: str) -> dict[str, str]:
-    """Build Chroma ``where`` filters from explicit cues in the user question."""
+    """Build simple string equality filters from explicit cues in the user question.
+
+    Does **not** include multi-ticker ``$or`` logic; use ``build_chroma_where_clause`` for the
+    full Chroma filter object.
+
+    Args:
+        query: Raw user text.
+
+    Returns:
+        Keys among ``form_type``, ``quarter``, ``filing_date``, and optionally ``ticker`` when
+        exactly one ticker-like token survives filtering.
+    """
     filters: dict[str, str] = {}
 
     form = FORM_RE.search(query)
@@ -246,11 +300,17 @@ def extract_metadata_filters(query: str) -> dict[str, str]:
 
 
 def build_chroma_where_clause(query: str) -> dict[str, Any] | None:
-    """Metadata-first narrowing for hybrid RAG: Chroma ``where`` applied before vector search.
+    """Build the Chroma ``where`` metadata filter applied before vector search.
 
-    Combines explicit query cues (form, quarter, filing date) with ticker scope from
-    ``extract_tickers_for_retrieval`` (company names + explicit symbols). Multiple tickers
-    become ``{"$or": [{"ticker": ...}, ...]}`` merged with ``$and`` alongside other filters.
+    Combines ``extract_metadata_filters`` (form, quarter, filing date, single-ticker shortcut)
+    with the full resolved ticker list from ``extract_tickers_for_retrieval``. Multiple tickers
+    become ``{"$or": [{"ticker": ...}, ...]}`` merged under ``$and`` with other clauses.
+
+    Args:
+        query: Raw user question.
+
+    Returns:
+        Chroma-compatible filter dict, or ``None`` when no metadata narrowing is inferred.
     """
     explicit = extract_metadata_filters(query)
     resolved = extract_tickers_for_retrieval(query)
@@ -291,11 +351,18 @@ def build_chroma_where_clause(query: str) -> dict[str, Any] | None:
 
 
 def build_chroma_where_clause_for_ticker(query: str, ticker: str) -> dict[str, Any] | None:
-    """Metadata filter scoped to a single ticker (for multi-company hybrid retrieval).
+    """Build a ``where`` clause for one issuer, for per-ticker pools in multi-company retrieval.
 
-    Reuses form/quarter/date constraints from the question but fixes ``ticker`` so semantic
-    search runs per issuer instead of one global top-``k`` over ``$or`` tickers (which one
-    company can dominate).
+    Reuses form/quarter/date constraints from ``extract_metadata_filters`` but replaces any
+    ticker scope with the explicit ``ticker`` argument so each symbol gets its own similarity
+    search.
+
+    Args:
+        query: Raw user question (for non-ticker metadata cues).
+        ticker: Symbol to pin (case-insensitive; stored uppercased in metadata).
+
+    Returns:
+        Chroma filter dict, or ``None`` if ``ticker`` is blank after strip.
     """
     sym = ticker.strip().upper()
     if not sym:

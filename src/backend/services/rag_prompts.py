@@ -1,4 +1,9 @@
-"""LLM system prompt for the EDGAR RAG chat pipeline."""
+"""LLM system prompt for the EDGAR RAG chat pipeline.
+
+``SYSTEM_PROMPT`` is the static system-side instruction string passed to ``ChatOllama`` as the
+first message in ``EdgarHybridRAG.answer``. Runtime placeholders are not interpolated here; the
+human message supplies ``{question}`` and ``{context}`` via ``ChatPromptTemplate`` in code.
+"""
 
 SYSTEM_PROMPT = """
 You are a helpful assistant that can answer user business and investment focused questions by

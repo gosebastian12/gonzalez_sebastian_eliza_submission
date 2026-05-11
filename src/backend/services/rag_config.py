@@ -7,6 +7,15 @@ from dataclasses import dataclass, replace
 
 
 def _env_int(name: str, default: int) -> int:
+    """Read an integer environment variable, or return ``default`` if unset/blank.
+
+    Args:
+        name: Environment variable name (e.g. ``RAG_NUM_CTX``).
+        default: Value used when the variable is missing or empty after strip.
+
+    Returns:
+        Parsed ``int`` from the variable, or ``default``.
+    """
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
@@ -14,6 +23,16 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _env_bool(name: str, default: bool) -> bool:
+    """Read a boolean-like environment variable, or return ``default`` if unset/blank.
+
+    Args:
+        name: Environment variable name.
+        default: Value when missing/empty.
+
+    Returns:
+        ``default`` when unset or blank-after-strip. Otherwise ``True`` for ``1``, ``true``,
+        ``yes``, ``on`` (case-insensitive), and ``False`` for any other non-empty value.
+    """
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
@@ -21,6 +40,15 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _env_float(name: str, default: float) -> float:
+    """Read a float environment variable, or return ``default`` if unset/blank.
+
+    Args:
+        name: Environment variable name.
+        default: Fallback when missing/empty.
+
+    Returns:
+        Parsed ``float``, or ``default``.
+    """
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
@@ -28,6 +56,15 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _env_str(name: str, default: str) -> str:
+    """Read a string environment variable, or return ``default`` if unset.
+
+    Args:
+        name: Environment variable name.
+        default: Used when the variable is missing; also when set to whitespace-only.
+
+    Returns:
+        Stripped string from the environment, or ``default``.
+    """
     raw = os.environ.get(name)
     if raw is None:
         return default
@@ -49,8 +86,18 @@ class RAGConfig:
     ``RAG_DISABLE_RECENCY_BOOST`` — skip recency tie-breaking in lexical re-ranking (testing only).
     ``RAG_MIN_CHUNK_BODY_CHARS`` — prefer chunks at least this long for substantive tie-breaks.
     ``RAG_RERANK_LENGTH_LOG_WEIGHT`` — after relevance, favor longer chunks using ``log1p(char_len) * weight``.
-    ``RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K`` — when multiple companies are detected, Chroma
-    ``k`` per ticker before merge (floor also uses ``RAG_SEMANTIC_K`` / issuer count).
+    ``RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K`` / ``multi_entity_per_ticker_semantic_k`` —
+    Chroma ``k`` for **each** issuer when ``extract_tickers_for_retrieval`` finds **two or more**
+    tickers (multi-company questions). ``EdgarHybridRAG.retrieve`` runs one
+    ``similarity_search_by_vector`` per symbol with ``build_chroma_where_clause_for_ticker`` so
+    hits are not drawn from a single global top-``k`` over an ``$or`` of tickers (where one
+    embedding could dominate). The per-symbol ``k`` is
+    ``max(multi_entity_per_ticker_semantic_k, (semantic_k + n - 1) // n)`` with ``n`` = number of
+    detected tickers: your setting is a **floor** per ticker, while the second term **splits**
+    ``semantic_k`` fairly across issuers (integer ceiling via ``+ n - 1``). If the merged pool
+    is empty, retrieval **falls back** to one search with ``k=semantic_k`` and the usual combined
+    ``where`` clause. For **zero or one** detected ticker this field is **not** used (retrieval
+    uses ``semantic_k`` only). Integer; default ``5``. Env unset → dataclass default.
     """
 
     collection_name: str = "edgar_reports"
@@ -77,6 +124,15 @@ class RAGConfig:
 
     @classmethod
     def from_env(cls) -> RAGConfig:
+        """Build a ``RAGConfig`` from process environment variables and normalize it.
+
+        All knobs are optional at the OS level; defaults come from dataclass fields and
+        ``RAGConfig``'s class docstring lists the supported ``RAG_*`` names.
+
+        Returns:
+            A new ``RAGConfig`` instance with ``.normalized()`` applied so ``num_predict``,
+            ``num_ctx``, and overhead stay mutually consistent.
+        """
         hard_cap = _env_int("RAG_NUM_CTX_HARD_CAP", 131072)
         raw_ctx = _env_int("RAG_NUM_CTX", cls.num_ctx)
         num_ctx = max(2048, min(raw_ctx, hard_cap))
@@ -125,7 +181,16 @@ class RAGConfig:
         return cfg.normalized()
 
     def normalized(self) -> RAGConfig:
-        """Ensure ``num_predict``, overhead, and a minimum retrieval budget fit in ``num_ctx``."""
+        """Return a copy with ``num_predict``, overhead, and retrieval slack clamped into ``num_ctx``.
+
+        Ensures a minimum slice of the context window remains for retrieved text, caps
+        ``chars_per_token_estimate`` to a sane band, and may lower ``num_predict`` or
+        ``prompt_overhead_tokens`` if their sum would exceed ``num_ctx``.
+
+        Returns:
+            New ``RAGConfig`` via ``dataclasses.replace``; fields not involved in the budget
+            math are copied unchanged.
+        """
         overhead = max(64, self.prompt_overhead_tokens)
         predict = max(32, self.num_predict)
         ctx = max(2048, self.num_ctx)

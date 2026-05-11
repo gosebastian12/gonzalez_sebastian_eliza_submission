@@ -545,9 +545,6 @@
             <li>
               <strong>Body shape after the header:</strong> exports often place dense machine-tagged numeric blocks first, then the human-readable SEC cover (<code>UNITED STATES SECURITIES AND EXCHANGE COMMISSION</code>, <code>FORM 10-Q</code> / <code>10-K</code>) and narrative sections with <strong>Part / Item</strong> headings and <strong>pipe-separated</strong> financial tables. That predictable mix motivates treating tabular pipe text as first-class context in prompts and lexical scoring—not random noise in a generic PDF dump.
             </li>
-            <li>
-              <strong><code>manifest.json</code>:</strong> ships with the corpus zip as an inventory (file list, counts, 10-K vs 10-Q mix, sector coverage). It documents what is actually in the vector store after ingest and sets reviewer expectations for ticker/year coverage without scraping EDGAR live in the demo.
-            </li>
           </ul>
           <p class="slide-foot">
             On-disk layout &amp; header parsing: <code>src/backend/data_processing/chunk_and_embed.py</code> (<code>extract_header_metadata</code>, filename fallback). Runtime filters &amp; multi-issuer behavior: <code>edgar_hybrid_rag.py</code>, <code>edgar_query_patterns.py</code>. Default ingest path: repo <code>edgar_corpus/</code> (override <code>--corpus-dir</code>).
@@ -640,7 +637,7 @@
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Lexical Ordering, Optional LLM Scoring, &amp; <code>final_k</code></h2>
+          <h2 class="slide-heading">Lexical Ordering, Optional Top-NLLM Scoring, &amp; <code>final_k</code></h2>
           <p class="slide-lede">
             Continuation of <code>retrieve()</code> after Chroma returns candidates: deterministic re-order, then optional cross-encoder-style LLM scoring on the list prefix, then slice for context packing.
           </p>
@@ -665,7 +662,7 @@
         </div>
         <div class="slide-inner">
           <h2 class="slide-heading">Prompt Assembly &amp; Chat UI</h2>
-          <p class="slide-lede">Flow below matches the bullets: static system prompt, capped context assembly, model call, JSON to the chat template.</p>
+          <p class="slide-lede">Flow below matches the bullets: static system prompt, capped context assembly, model call, JSON to the chat template. On avg. ~15 seconds to display answer in UI.</p>
           <img
             class="slide-diagram"
             src="./diagram-generation.svg"
@@ -764,14 +761,15 @@
         <div class="slide-inner">
           <h2 class="slide-heading">Opportunities for Improvement</h2>
           <ul class="slide-bullets">
-            <li><strong>Generation length:</strong> Ollama <code>num_predict</code> caps completion tokens; answers truncate when budget exhausted mid-stream.</li>
-            <li><strong>Context window math:</strong> <code>RAGConfig.normalized()</code> clamps <code>num_predict</code> vs overhead/token slack assumptions documented in that method.</li>
-            <li><strong>Retrieval breadth:</strong> candidate pool bounded by <code>semantic_k</code> / per-ticker analogues; final list capped by <code>final_k</code>.</li>
-            <li><strong>LLM re-rank scope:</strong> scoring invoked only for prefix length <code>rerank_top_n</code>; tail retains lexical order.</li>
-            <li><strong>Infrastructure coupling:</strong> runtime depends on reachable Chroma HTTP API and Ollama models configured via env defaults in <code>RAGConfig</code>.</li>
-            <li><strong>SYSTEM_PROMPT body:</strong> trailing separator snippet exists verbatim inside <code>rag_prompts.py</code> constant—review if unintended for production prompts.</li>
+            <li><strong>Quantitative Performance Metrics:</strong> Calculating performance metrics such as Mean Reciprocal Rank, Hit Rate, Recall/Precision @K, etc. with libraries such as <code>ragas</code> would help quantify the performance of the system. Such code would be added to <code>evaluation.py</code>.</li>
+            <li><strong>Generation Length:</strong> Ollama <code>num_predict</code> caps completion tokens; answers truncate when budget exhausted mid-stream. Larger models would allow for longer generation lengths.</li>
+            <li><strong>Context Length:</strong> The current context length is 4096 tokens. Larger models would allow for longer context lengths and thus more retrieved chunks.</li>
+            <li><strong>Unit Testing:</strong> Development of unit tests would help ensure the system is working as expected, especially all steps of chunking process.</li>
+            <li><strong>User-Provided Documents:</strong> A new feature could be added to allow users to upload their own documents to be ingested into the vector database.</li>
+            <li><strong>Better Component Modularity:</strong> Reliance on ollama models and chroma database is strict and could be better generalized to allow for more flexibility in the system.</li>
+            <li><strong>Handling of 10-K and 10-Q Diagrams:</strong> Any images present in company reports are not stored in corpus <code>.txt/</code> files. Their inclusion would allow system to answer any user questions about them by leveraging multi-modal LLM's.</li>
+            <li><strong>Storing Chat History:</strong> Inclusion of a backend SQL database in architecture would allow for storing/caching chat history and retrieving it later.</li>
           </ul>
-          <p class="slide-foot">See <code>logs/test_questions.md</code> for the full prompt tables; the Findings slide summarizes the same scenarios.</p>
         </div>
       </section>
 
