@@ -13,7 +13,7 @@
     <text x="534" y="74" fill="#e8eef7" text-anchor="middle">split_tables_and_text</text>
     <rect x="624" y="48" width="140" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
     <text x="694" y="74" fill="#e8eef7" text-anchor="middle">split_semantic_text</text>
-    <rect x="784" y="48" width="152" height="44" rx="6" fill="#1a2436" stroke="#263042" stroke-width="2"/>
+    <rect x="784" y="48" width="152" height="44" rx="6" fill="#1a2436" stroke="#3d8bfd"/>
     <text x="860" y="74" fill="#e8eef7" text-anchor="middle">split_with_overlap</text>
   </g>
   <path d="M144 70 L164 70 M284 70 L304 70 M444 70 L464 70 M604 70 L624 70 M764 70 L784 70" stroke="#3d8bfd" stroke-width="2"/>

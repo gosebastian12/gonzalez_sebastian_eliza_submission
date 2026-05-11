@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 860" role="img" aria-labelledby="rr">
+  <title id="rr">Re-ranking and truncation after Chroma retrieval</title>
+  <defs>
+    <marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#3d8bfd"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="860" fill="#121923"/>
+
+  <text x="700" y="32" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="14" font-weight="600" text-anchor="middle">Re-ranking and truncation</text>
+  <text x="700" y="54" fill="#6b7a92" font-family="Segoe UI,system-ui,sans-serif" font-size="10.5" text-anchor="middle">Same pipeline step that follows retrieval: order chunks, optionally refine with the model, then trim for the answer</text>
+
+  <!-- Block 1: Candidate Chunks — left icon; icon + text vertically centered in the row -->
+  <rect x="220" y="68" width="960" height="72" rx="10" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <g transform="translate(240, 88)" aria-hidden="true">
+    <rect x="0" y="6" width="22" height="28" rx="3" fill="#263042" stroke="#3d8bfd"/>
+    <rect x="6" y="2" width="22" height="28" rx="3" fill="#1a2436" stroke="#5a9dff"/>
+    <rect x="12" y="-2" width="22" height="28" rx="3" fill="#0c1117" stroke="#3d8bfd"/>
+  </g>
+  <text x="288" y="100" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="13" font-weight="600" text-anchor="start">Candidate Chunks</text>
+  <text x="288" y="118" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="10" text-anchor="start">From the vector store; duplicates already removed</text>
+
+  <line x1="700" y1="140" x2="700" y2="152" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+
+  <!-- First pass: four columns centered as a row (centers 286, 562, 838, 1114) -->
+  <rect x="48" y="152" width="1304" height="248" rx="12" fill="#0c1117" stroke="#3d8bfd" stroke-width="1.5"/>
+  <text x="700" y="184" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600" text-anchor="middle">First pass: rule-based ordering</text>
+
+  <g transform="translate(286,204)" aria-hidden="true">
+    <rect x="-18" y="8" width="36" height="44" rx="4" fill="#263042" stroke="#3d8bfd"/>
+    <path d="M-10,38 L-4,44 L10,26" fill="none" stroke="#5a9dff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="0" y="92" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">Enough</text>
+    <text x="0" y="106" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">substance</text>
+  </g>
+
+  <g transform="translate(562,204)" aria-hidden="true">
+    <rect x="-34" y="12" width="52" height="18" rx="4" fill="#1a2436" stroke="#3d8bfd"/>
+    <rect x="-22" y="28" width="44" height="16" rx="4" fill="#263042" stroke="#5a9dff"/>
+    <text x="0" y="92" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">Question</text>
+    <text x="0" y="106" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">word match</text>
+  </g>
+
+  <g transform="translate(838,204)" aria-hidden="true">
+    <rect x="-22" y="36" width="8" height="16" rx="1" fill="#3d8bfd"/>
+    <rect x="-10" y="28" width="8" height="24" rx="1" fill="#5a9dff"/>
+    <rect x="2" y="18" width="8" height="34" rx="1" fill="#8b9bb4"/>
+    <text x="0" y="92" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">Prefer</text>
+    <text x="0" y="106" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">richer slices</text>
+  </g>
+
+  <g transform="translate(1114,204)" aria-hidden="true">
+    <rect x="-22" y="8" width="44" height="40" rx="4" fill="#1a2436" stroke="#3d8bfd"/>
+    <line x1="-22" y1="18" x2="22" y2="18" stroke="#3d8bfd" stroke-width="2"/>
+    <circle cx="-10" cy="12" r="2" fill="#5a9dff"/>
+    <circle cx="0" cy="12" r="2" fill="#5a9dff"/>
+    <circle cx="10" cy="12" r="2" fill="#5a9dff"/>
+    <text x="0" y="92" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">Favor</text>
+    <text x="0" y="106" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">recent filings</text>
+  </g>
+
+  <text x="700" y="338" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="9" text-anchor="middle">If the question pins a time window, &quot;newer first&quot; is relaxed so older-but-relevant quarters can surface</text>
+  <text x="700" y="358" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="9" text-anchor="middle">Company names and filing headers also nudge the match score</text>
+
+  <line x1="700" y1="400" x2="700" y2="418" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+
+  <!-- Diamond: larger, gold stroke (chunking-slide accent) -->
+  <polygon points="700,418 568,508 700,598 832,508" fill="#263042" stroke="#c9a227" stroke-width="2.5"/>
+  <text x="700" y="498" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600" text-anchor="middle">Optional second pass</text>
+  <text x="700" y="520" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="12" font-weight="600" text-anchor="middle">with the language model?</text>
+
+  <text x="420" y="486" fill="#3d8bfd" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">Yes</text>
+  <text x="980" y="486" fill="#3d8bfd" font-family="Segoe UI,sans-serif" font-size="10" font-weight="600" text-anchor="middle">No</text>
+
+  <!-- Lines from diamond vertices to top center of branch boxes -->
+  <line x1="568" y1="508" x2="338" y2="568" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+  <line x1="832" y1="508" x2="1062" y2="568" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+
+  <rect x="48" y="568" width="580" height="140" rx="12" fill="#0c1117" stroke="#3d8bfd" stroke-width="1.5"/>
+  <g transform="translate(88,590)" aria-hidden="true">
+    <rect x="0" y="8" width="100" height="6" rx="2" fill="#263042" stroke="#3d8bfd"/>
+    <rect x="0" y="20" width="80" height="6" rx="2" fill="#1a2436" stroke="#263042"/>
+    <rect x="0" y="32" width="90" height="6" rx="2" fill="#1a2436" stroke="#263042"/>
+  </g>
+  <text x="338" y="618" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="11" font-weight="600" text-anchor="middle">Model-assisted resort</text>
+  <text x="338" y="644" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Brief excerpt from each leading chunk is judged for relevance</text>
+  <text x="338" y="664" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Top of the list is reshuffled; the rest keeps the rule order</text>
+  <text x="338" y="688" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="9" text-anchor="middle">Only a capped prefix is rescored for speed</text>
+
+  <rect x="772" y="568" width="580" height="100" rx="12" fill="#0c1117" stroke="#3d8bfd" stroke-width="1.5"/>
+  <g transform="translate(812,598)" aria-hidden="true">
+    <line x1="0" y1="20" x2="44" y2="20" stroke="#3d8bfd" stroke-width="3"/>
+    <line x1="10" y1="12" x2="10" y2="28" stroke="#5a9dff" stroke-width="2"/>
+    <line x1="22" y1="10" x2="22" y2="30" stroke="#5a9dff" stroke-width="2"/>
+    <line x1="34" y1="14" x2="34" y2="26" stroke="#5a9dff" stroke-width="2"/>
+  </g>
+  <text x="1062" y="620" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="11" font-weight="600" text-anchor="middle">Straight through</text>
+  <text x="1062" y="642" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="10" text-anchor="middle">Keep the rule-based order unchanged</text>
+
+  <line x1="338" y1="708" x2="338" y2="728" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+  <line x1="1062" y1="668" x2="1062" y2="728" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+  <line x1="338" y1="728" x2="668" y2="728" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+  <line x1="1062" y1="728" x2="732" y2="728" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+
+  <rect x="220" y="736" width="960" height="92" rx="12" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <g transform="translate(248,754)" aria-hidden="true">
+    <rect x="0" y="0" width="56" height="40" rx="4" fill="#263042" stroke="#3d8bfd"/>
+    <path d="M36,0 L56,0 L56,40 L36,40 Z" fill="#121923" stroke="#c9a227" stroke-width="1.5"/>
+    <line x1="36" y1="0" x2="36" y2="40" stroke="#c9a227" stroke-width="2" stroke-dasharray="3 2"/>
+  </g>
+  <text x="700" y="770" fill="#e8eef7" font-family="Segoe UI,sans-serif" font-size="11" font-weight="600" text-anchor="middle">Trim to the cap used for the prompt and the sources panel</text>
+  <text x="700" y="792" fill="#8b9bb4" font-family="Segoe UI,sans-serif" font-size="9.5" text-anchor="middle">Same short list feeds the answer composer and what the UI can cite</text>
+  <text x="700" y="812" fill="#3d8bfd" font-family="Segoe UI,sans-serif" font-size="9.5" font-weight="600" text-anchor="middle">Hand off to answer generation</text>
+
+  <line x1="700" y1="728" x2="700" y2="736" stroke="#3d8bfd" stroke-width="2" marker-end="url(#ar2)"/>
+</svg>

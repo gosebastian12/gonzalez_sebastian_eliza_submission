@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="tg">
+  <title id="tg">Answer generation: system prompt, assembled human message with budget constraints, ChatOllama, JSON to chat UI</title>
+  <defs>
+    <marker id="mg" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#3d8bfd"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="320" fill="#121923"/>
+
+  <text x="600" y="28" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">answer() path</text>
+  <text x="600" y="44" fill="#6b7a92" font-family="Segoe UI,system-ui,sans-serif" font-size="9.5" text-anchor="middle">rag_prompts.py, rag_context.py, chat.html, main.py</text>
+
+  <!-- 1 System -->
+  <rect x="22" y="52" width="172" height="236" rx="10" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <g transform="translate(48,72)" aria-hidden="true">
+    <rect x="0" y="0" width="116" height="100" rx="6" fill="#0c1117" stroke="#3d8bfd" stroke-width="1.2"/>
+    <rect x="12" y="14" width="92" height="5" rx="1" fill="#3d8bfd"/>
+    <rect x="12" y="26" width="76" height="5" rx="1" fill="#5a9dff"/>
+    <rect x="12" y="38" width="84" height="5" rx="1" fill="#8b9bb4"/>
+    <rect x="12" y="50" width="64" height="5" rx="1" fill="#8b9bb4"/>
+    <rect x="12" y="62" width="72" height="5" rx="1" fill="#8b9bb4"/>
+  </g>
+  <text x="108" y="200" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">System</text>
+  <text x="108" y="220" fill="#8b9bb4" font-family="Consolas,monospace" font-size="8.5" text-anchor="middle">SYSTEM_PROMPT</text>
+  <text x="108" y="236" fill="#6b7a92" font-family="Segoe UI,system-ui,sans-serif" font-size="8" text-anchor="middle">LangChain SystemMessage</text>
+
+  <line x1="194" y1="170" x2="204" y2="170" stroke="#3d8bfd" stroke-width="2" marker-end="url(#mg)"/>
+
+  <!-- 2 Assemble: explicit human-slot composition + constraints (not decorative icons) -->
+  <rect x="206" y="52" width="518" height="236" rx="10" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <text x="220" y="72" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="11" font-weight="600" text-anchor="start">Human message assembly (passed with system prompt)</text>
+  <text x="220" y="90" fill="#8b9bb4" font-family="Consolas,monospace" font-size="8.5" text-anchor="start">ChatPromptTemplate.from_messages(...) in answer()</text>
+
+  <rect x="218" y="98" width="494" height="22" rx="4" fill="#0c1117" stroke="#5a9dff" stroke-width="1"/>
+  <text x="228" y="113" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="8.5" text-anchor="start">1. User question (verbatim HumanMessage)</text>
+
+  <rect x="218" y="124" width="494" height="22" rx="4" fill="#0c1117" stroke="#5a9dff" stroke-width="1"/>
+  <text x="228" y="139" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="8.5" text-anchor="start">2. build_retrieval_context(...) string: per-chunk headers + bodies</text>
+
+  <rect x="218" y="150" width="494" height="22" rx="4" fill="#0c1117" stroke="#5a9dff" stroke-width="1"/>
+  <text x="228" y="165" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="8.5" text-anchor="start">3. Fixed HumanMessage tail after context (template instruction strings)</text>
+
+  <rect x="218" y="180" width="494" height="92" rx="6" fill="#0c1117" stroke="#c9a227" stroke-width="1.5"/>
+  <text x="228" y="198" fill="#c9a227" font-family="Segoe UI,system-ui,sans-serif" font-size="8.5" font-weight="600" text-anchor="start">Constraints on the constructed prompt</text>
+  <text x="228" y="214" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="8" text-anchor="start">effective_context_char_budget from num_ctx, num_predict, and overhead estimate</text>
+  <text x="228" y="230" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="8" text-anchor="start">max_context_chars clamps how much retrieval text may be packed in</text>
+  <text x="228" y="246" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="8" text-anchor="start">Per-chunk truncation: header line(s) + body; continuation markers when split</text>
+  <text x="228" y="262" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="7.5" text-anchor="start">Builder lives in rag_context.py / answer(); template strings in rag_prompts.py</text>
+
+  <line x1="724" y1="170" x2="734" y2="170" stroke="#3d8bfd" stroke-width="2" marker-end="url(#mg)"/>
+
+  <!-- 3 Model -->
+  <rect x="736" y="52" width="132" height="236" rx="10" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <circle cx="802" cy="130" r="28" fill="none" stroke="#3d8bfd" stroke-width="2"/>
+  <path d="M780,130 Q802,104 824,130 Q802,156 780,130" fill="none" stroke="#5a9dff" stroke-width="1.5"/>
+  <text x="802" y="200" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="12" font-weight="600" text-anchor="middle">Model</text>
+  <text x="802" y="220" fill="#8b9bb4" font-family="Consolas,monospace" font-size="8.5" text-anchor="middle">ChatOllama</text>
+  <text x="802" y="238" fill="#6b7a92" font-family="Segoe UI,system-ui,sans-serif" font-size="8" text-anchor="middle">invoke / stream</text>
+
+  <line x1="868" y1="170" x2="878" y2="170" stroke="#3d8bfd" stroke-width="2" marker-end="url(#mg)"/>
+
+  <!-- 4 Client -->
+  <rect x="880" y="52" width="298" height="236" rx="10" fill="#1a2436" stroke="#3d8bfd" stroke-width="1.5"/>
+  <line x1="1029" y1="62" x2="1029" y2="278" stroke="#263042" stroke-width="1.5"/>
+  <text x="954" y="78" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" text-anchor="middle">Answer</text>
+  <text x="1074" y="78" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="9" font-weight="600" text-anchor="middle">Sources</text>
+  <rect x="896" y="88" width="118" height="72" rx="6" fill="#0c1117" stroke="#3d8bfd"/>
+  <text x="955" y="112" fill="#6b7a92" font-family="Segoe UI,system-ui,sans-serif" font-size="7.5" text-anchor="middle">chat.html</text>
+  <text x="955" y="128" fill="#e8eef7" font-family="Consolas,monospace" font-size="7.5" text-anchor="middle">message.content</text>
+  <text x="955" y="146" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="7" text-anchor="middle">full model text</text>
+  <rect x="1042" y="88" width="122" height="88" rx="6" fill="#0c1117" stroke="#3d8bfd"/>
+  <text x="1103" y="108" fill="#6b7a92" font-family="Segoe UI,system-ui,sans-serif" font-size="7.5" text-anchor="middle">when present</text>
+  <text x="1103" y="126" fill="#e8eef7" font-family="Consolas,monospace" font-size="7.5" text-anchor="middle">source_chunks</text>
+  <text x="1103" y="144" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="7" text-anchor="middle">mirrors retrieved</text>
+  <text x="1103" y="160" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="7" text-anchor="middle">docs for UI list</text>
+  <text x="1029" y="228" fill="#e8eef7" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="600" text-anchor="middle">JSON to template</text>
+  <text x="1029" y="248" fill="#8b9bb4" font-family="Consolas,monospace" font-size="7.5" text-anchor="middle">answer, sources, metadata, counts, ...</text>
+
+  <text x="600" y="308" fill="#8b9bb4" font-family="Segoe UI,system-ui,sans-serif" font-size="9.5" text-anchor="middle">POST /chat wraps answer(); asyncio.wait_for + RAG_HTTP_TIMEOUT on the call path</text>
+</svg>

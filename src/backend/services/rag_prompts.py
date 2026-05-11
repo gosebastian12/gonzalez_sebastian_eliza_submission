@@ -1,4 +1,4 @@
-"""LLM system prompts for the EDGAR RAG chat pipeline."""
+"""LLM system prompt for the EDGAR RAG chat pipeline."""
 
 SYSTEM_PROMPT = """
 You are a helpful assistant that can answer user business and investment focused questions by

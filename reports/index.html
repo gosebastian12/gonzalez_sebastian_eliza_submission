@@ -251,6 +251,59 @@
         max-width: min(100%, 980px);
       }
 
+      .slide-generation h2.slide-heading {
+        font-size: clamp(1.35rem, 2.85vw, 1.95rem);
+      }
+
+      .slide-generation .slide-lede {
+        font-size: 0.95rem;
+        line-height: 1.52;
+      }
+
+      .slide-generation .slide-bullets {
+        font-size: 0.95rem;
+        line-height: 1.46;
+      }
+
+      .slide-generation .slide-bullets li {
+        margin-bottom: 0.36rem;
+      }
+
+      .slide-generation .slide-bullets code {
+        font-size: 0.84rem;
+      }
+
+      .slide-generation .slide-foot {
+        font-size: 0.78rem;
+      }
+
+      .slide-generation .slide-diagram {
+        max-height: clamp(220px, 42vh, 340px);
+        max-width: min(100%, 1200px);
+      }
+
+      .slide-retrieval h2.slide-heading,
+      .slide-reranking h2.slide-heading {
+        font-size: clamp(1.2rem, 2.5vw, 1.65rem);
+      }
+
+      .slide-retrieval .slide-lede,
+      .slide-reranking .slide-lede {
+        font-size: 0.88rem;
+        line-height: 1.48;
+      }
+
+      .slide-retrieval .slide-foot,
+      .slide-reranking .slide-foot {
+        font-size: 0.72rem;
+      }
+
+      .slide-retrieval .slide-diagram,
+      .slide-reranking .slide-diagram {
+        max-height: clamp(240px, 42vh, 380px);
+        max-width: min(100%, 1200px);
+      }
+
       .diagram-lightbox {
         position: fixed;
         inset: 0;
@@ -348,6 +401,27 @@
         font-size: 0.76rem;
       }
 
+      /* Findings slide: nested scenario → behavior (see logs/test_questions.md) */
+      .slide-content.slide-findings .slide-bullets > li {
+        margin-bottom: 0.42rem;
+      }
+
+      .slide-content.slide-findings .slide-bullets ul {
+        margin: 0.2rem 0 0.05rem;
+        padding-left: 1rem;
+        list-style-type: disc;
+      }
+
+      .slide-content.slide-findings .slide-bullets ul li {
+        margin-bottom: 0.24rem;
+        line-height: 1.42;
+      }
+
+      .slide-content.slide-findings .slide-bullets ul .scenario-label {
+        font-weight: 600;
+        color: var(--text);
+      }
+
       .hud {
         position: fixed;
         bottom: 14px;
@@ -436,13 +510,13 @@
             Slide headers mirror repository concerns; content cites concrete modules and behavior only.
           </p>
           <ul class="slide-bullets">
-            <li><strong>SEC EDGAR filings summary</strong> — corpus file shape and metadata extraction in ingestion.</li>
+            <li><strong>SEC EDGAR filings summary</strong> — <code>edgar_corpus</code> <code>.txt</code> layout, <code>manifest.json</code>, and patterns leveraged for metadata + retrieval.</li>
             <li><strong>System architecture</strong> — FastAPI entrypoint, threadpool call into <code>EdgarHybridRAG</code>.</li>
             <li><strong>Chunking, embedding &amp; ingestion</strong> — <code>chunk_and_embed.py</code> pipeline into Chroma.</li>
-            <li><strong>Retrieval &amp; reranking</strong> — <code>retrieve()</code>, <code>edgar_query_patterns.py</code>, <code>rag_reranking.py</code>.</li>
-            <li><strong>Generation &amp; UI</strong> — <code>rag_prompts.py</code>, LangChain chat chain, Jinja chat template.</li>
-            <li><strong>Testing approach</strong> — configurable runtime via env-backed <code>RAGConfig</code>; CLI entry exists.</li>
-            <li><strong>Findings</strong> — notable branching / safeguards implemented in code paths.</li>
+            <li><strong>Hybrid retrieval</strong> — Chroma <code>where</code>, embed query, multi-issuer vs single path, fallbacks, dedupe (<code>diagram-retrieval.svg</code> / <code>edgar_hybrid_rag.py</code>).</li>
+            <li><strong>Re-ranking</strong> — lexical + recency tuple sort, optional <code>rerank_with_llm</code>, <code>final_k</code> slice (<code>diagram-reranking.svg</code> / <code>rag_reranking.py</code>).</li>
+            <li><strong>Generation &amp; UI</strong> — prompt assembly and chat response (<code>diagram-generation.svg</code> / <code>rag_prompts.py</code>, LangChain template, <code>chat.html</code>).</li>
+            <li><strong>Findings</strong> — manual prompt scenarios and observed behaviors from <code>logs/test_questions.md</code>.</li>
             <li><strong>Limitations</strong> — caps and gates enforced by config and models.</li>
           </ul>
           <p class="slide-foot">Slides follow headers in this deck only; no claims beyond referenced files.</p>
@@ -456,33 +530,27 @@
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Corpus inputs &amp; filing headers</h2>
+          <h2 class="slide-heading">Corpus Layout &amp; Patterns</h2>
           <p class="slide-lede">
-            Ingestion assumes plain-text exports matching <code>*_full.txt</code>; logic lives in
-            <code>src/backend/data_processing/chunk_and_embed.py</code>.
+            Observed structure under <code>edgar_corpus/</code> (with <code>manifest.json</code>) is stable enough to drive
+            <strong>metadata on every chunk</strong> and <strong>hybrid retrieval</strong> in <code>EdgarHybridRAG</code>—not ad hoc parsing per question at runtime beyond query interpretation.
           </p>
           <ul class="slide-bullets">
             <li>
-              <strong>Preface strip:</strong> if <code>SEC_REPORT_START_RE</code> matches
-              “UNITED STATES SECURITIES AND EXCHANGE COMMISSION”, body chunking starts there via
-              <code>strip_preface_noise</code>; otherwise the whole file is used.
+              <strong>Filename convention:</strong> <code>TICKER_10K|10Q[_YYYYQn]_YYYY-MM-DD_full.txt</code> encodes symbol, form, optional fiscal quarter label, and filing date. When the header block is incomplete, ingestion falls back to this pattern so Chroma still gets consistent <code>ticker</code> / <code>form_type</code> / dates for filtering.
             </li>
             <li>
-              <strong>Header metadata:</strong> first lines before <code>===</code> are scanned with keys mapped to
-              <code>company</code>, <code>ticker</code>, <code>filing_type</code>, <code>filing_date</code>,
-              <code>report_period</code>, <code>quarter</code>, <code>cik</code>, <code>source</code>. Missing ticker/type fall back to parsing the filename pattern
-              <code>ticker_form_quarter_filingdate_*</code>.
+              <strong>Leading key-value header:</strong> lines such as <code>Company:</code>, <code>Ticker:</code>, <code>Filing Type:</code>, <code>Filing Date:</code>, <code>Report Period:</code>, <code>Quarter:</code>, <code>CIK:</code>, <code>Source:</code>, <code>URL:</code> appear before a row of <code>=</code> characters. Those fields map directly into document metadata used for source labels and Chroma <code>where</code>-style filters at query time (<code>edgar_query_patterns.py</code> aligns user text to the same stored strings, e.g. 10-K vs 10-Q variants).
             </li>
             <li>
-              <strong><code>form_type</code>:</strong> copied from <code>filing_type</code> for downstream metadata (matches stored ingestion strings such as
-              “10-K (Annual Report)” / “10-Q (Quarterly Report)” — see <code>extract_header_metadata</code>).
+              <strong>Body shape after the header:</strong> exports often place dense machine-tagged numeric blocks first, then the human-readable SEC cover (<code>UNITED STATES SECURITIES AND EXCHANGE COMMISSION</code>, <code>FORM 10-Q</code> / <code>10-K</code>) and narrative sections with <strong>Part / Item</strong> headings and <strong>pipe-separated</strong> financial tables. That predictable mix motivates treating tabular pipe text as first-class context in prompts and lexical scoring—not random noise in a generic PDF dump.
             </li>
             <li>
-              <strong><code>SYSTEM_PROMPT</code></strong> in <code>rag_prompts.py</code> tells the model context comes from 10-Q and 10-K filing text (wording as defined in that constant).
+              <strong><code>manifest.json</code>:</strong> ships with the corpus zip as an inventory (file list, counts, 10-K vs 10-Q mix, sector coverage). It documents what is actually in the vector store after ingest and sets reviewer expectations for ticker/year coverage without scraping EDGAR live in the demo.
             </li>
           </ul>
           <p class="slide-foot">
-            Default corpus dir: <code>DEFAULT_CORPUS_DIR</code> = repo root / <code>edgar_corpus</code> (resolved via Path.parents from chunk_and_embed.py); override with <code>--corpus-dir</code>.
+            On-disk layout &amp; header parsing: <code>src/backend/data_processing/chunk_and_embed.py</code> (<code>extract_header_metadata</code>, filename fallback). Runtime filters &amp; multi-issuer behavior: <code>edgar_hybrid_rag.py</code>, <code>edgar_query_patterns.py</code>. Default ingest path: repo <code>edgar_corpus/</code> (override <code>--corpus-dir</code>).
           </p>
         </div>
       </section>
@@ -494,7 +562,7 @@
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Runtime architecture</h2>
+          <h2 class="slide-heading">Runtime Architecture</h2>
           <p class="slide-lede">
             Browser submits <code>POST /chat</code>; FastAPI runs <code>EdgarHybridRAG.answer</code> inside <code>run_in_threadpool</code>.
           </p>
@@ -517,11 +585,11 @@
       <!-- 5 Chunking embedding ingestion -->
       <section class="slide slide-content slide-chunking" aria-label="Chunking">
         <div class="slide-brand">
-          <span>Chunking, embedding &amp; ingestion</span>
+          <span>Chunking, Embedding &amp; Vector DB Ingestion</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Multi-stage chunking pipeline</h2>
+          <h2 class="slide-heading">Multi-Stage Chunking Pipeline</h2>
           <p class="slide-lede"><code>build_documents_for_report()</code> builds LangChain <code>Document</code> rows before embedding.</p>
           <img
             class="slide-diagram"
@@ -541,116 +609,149 @@
         </div>
       </section>
 
-      <!-- 6 Retrieval reranking -->
-      <section class="slide slide-content" aria-label="Retrieval">
+      <!-- 6 Hybrid retrieval (Chroma) -->
+      <section class="slide slide-content slide-retrieval" aria-label="Hybrid retrieval">
         <div class="slide-brand">
-          <span>Retrieval &amp; reranking</span>
+          <span>Hybrid retrieval</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Hybrid retrieval then reorder</h2>
+          <h2 class="slide-heading">Chroma Vector Retrieval Path</h2>
+          <p class="slide-lede">
+            Full branch logic through deduplicated <code>semantic_docs</code>; the next slide covers ordering and <code>final_k</code> truncation in the same <code>retrieve()</code> call.
+          </p>
           <img
             class="slide-diagram"
             src="./diagram-retrieval.svg"
-            alt="Chroma where clause embed query multi ticker branch rerank final k"
-            width="900"
-            height="380"
+            alt="Flowchart: build_chroma_where_clause, embed_query, multi-issuer vs single Chroma search, fallbacks, dedupe by document_identity_key"
+            width="1200"
+            height="790"
           />
-          <ul class="slide-bullets">
-            <li>
-              <strong>Where clause:</strong> <code>build_chroma_where_clause</code> merges regex-derived filters (form, quarter, ISO date) with tickers from
-              <code>extract_tickers_for_retrieval</code> (name map + filtered <code>TICKER_RE</code>). Multiple tickers become <code>$or</code>; <code>form_type_metadata_clause</code> expands
-              normalized 10-K / 10-Q to stored variants.
-            </li>
-            <li>
-              <strong>Multi-company:</strong> when <code>len(extract_tickers_for_retrieval) &gt;= 2</code>, each ticker runs <code>similarity_search_by_vector</code> with
-              <code>build_chroma_where_clause_for_ticker</code> and per-ticker <code>k</code> derived from <code>semantic_k</code> and <code>multi_entity_per_ticker_semantic_k</code>; pools merge then dedupe.
-            </li>
-            <li><strong>Fallback:</strong> empty filtered search retries with combined <code>chroma_where</code>, then unfiltered search if still empty.</li>
-            <li>
-              <strong>Dedupe key:</strong> <code>file_name :: chunk_index :: section_title</code> (<code>document_identity_key</code>).
-            </li>
-            <li>
-              <strong>Rerank:</strong> <code>rerank_lexical_then_recency</code> sorts by substantive flag, keyword/metadata score, <code>log1p(length)*length_log_weight</code>, then recency unless
-              <code>query_pins_specific_period</code> or <code>disable_recency_boost</code>.
-            </li>
-            <li>
-              <strong>Optional LLM rerank:</strong> if <code>use_reranker</code>, <code>rerank_with_llm</code> scores first <code>rerank_top_n</code> docs using snippet <code>[:1500]</code> chars and JSON score parse.
-            </li>
-            <li><strong>Return slice:</strong> <code>reranked[:final_k]</code>.</li>
-          </ul>
-          <p class="slide-foot">Source: edgar_hybrid_rag.py, edgar_query_patterns.py, rag_reranking.py, rag_config.py</p>
+          <p class="slide-foot">
+            Source: <code>edgar_hybrid_rag.py</code> (<code>retrieve</code>), <code>edgar_query_patterns.py</code> — details on the diagram; env: <code>RAG_SEMANTIC_K</code>, <code>RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K</code>.
+          </p>
         </div>
       </section>
 
-      <!-- 7 Generation UI -->
-      <section class="slide slide-content slide-text-only" aria-label="Generation UI">
+      <!-- 7 Re-ranking -->
+      <section class="slide slide-content slide-reranking" aria-label="Re-ranking">
         <div class="slide-brand">
-          <span>Generation &amp; UI</span>
+          <span>Re-ranking</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Prompt assembly &amp; chat UI</h2>
+          <h2 class="slide-heading">Lexical Ordering, Optional LLM Scoring, &amp; <code>final_k</code></h2>
+          <p class="slide-lede">
+            Continuation of <code>retrieve()</code> after Chroma returns candidates: deterministic re-order, then optional cross-encoder-style LLM scoring on the list prefix, then slice for context packing.
+          </p>
+          <img
+            class="slide-diagram"
+            src="./diagram-reranking.svg"
+            alt="Flowchart: rerank_lexical_then_recency tuple keys, use_reranker branch with rerank_with_llm, final_docs equals reranked slice final_k"
+            width="1400"
+            height="860"
+          />
+          <p class="slide-foot">
+            Source: <code>rag_reranking.py</code>, <code>edgar_hybrid_rag.py</code> (<code>rerank_with_llm</code>, <code>parse_llm_score</code>) — env: <code>RAG_USE_RERANKER</code>, <code>RAG_RERANK_TOP_N</code>, <code>RAG_FINAL_K</code>, <code>RAG_DISABLE_RECENCY_BOOST</code>, …
+          </p>
+        </div>
+      </section>
+
+      <!-- 8 Generation UI -->
+      <section class="slide slide-content slide-generation" aria-label="Generation UI">
+        <div class="slide-brand">
+          <span>Answer Generation &amp; UI</span>
+          <span class="slide-num"></span>
+        </div>
+        <div class="slide-inner">
+          <h2 class="slide-heading">Prompt Assembly &amp; Chat UI</h2>
+          <p class="slide-lede">Flow below matches the bullets: static system prompt, capped context assembly, model call, JSON to the chat template.</p>
+          <img
+            class="slide-diagram"
+            src="./diagram-generation.svg"
+            alt="Flow: System SYSTEM_PROMPT; human assembly lists question, build_retrieval_context string, fixed tail; gold box lists char budget and truncation constraints; ChatOllama; JSON to chat template with answer and source_chunks"
+            width="1200"
+            height="320"
+          />
           <ul class="slide-bullets">
-            <li>
-              <strong>System:</strong> <code>SYSTEM_PROMPT</code> constant from <code>rag_prompts.py</code> (exact wording including filing/tabular guidance as in source).
-            </li>
-            <li>
-              <strong>Human template:</strong> <code>ChatPromptTemplate.from_messages</code> in <code>answer()</code> inserts user question plus <code>build_retrieval_context(...)</code> output with fixed instruction strings after context.
-            </li>
-            <li>
-              <strong>Context budget:</strong> <code>effective_context_char_budget</code> derives a hard character cap from <code>num_ctx</code>, <code>num_predict</code>, overhead estimate; <code>max_context_chars</code> also clamps. Builder concatenates chunk headers (ticker, form, file, section, …) and bodies; truncates per chunk when needed with continuation per implementation.
-            </li>
-            <li>
-              <strong>API payload:</strong> <code>answer</code>, <code>sources</code>, <code>source_chunks</code>, <code>metadata_filters_used</code>, <code>retrieval_where_clause</code>,
-              <code>retrieved_count</code>, <code>sources_count</code>, <code>period_pinned_in_query</code>.
-            </li>
-            <li>
-              <strong>UI:</strong> <code>chat.html</code> renders <code>message.content</code> without length truncation; Sources list when <code>source_chunks</code> is defined post-success. Timeout via <code>RAG_HTTP_TIMEOUT</code> + <code>asyncio.wait_for</code>.
-            </li>
+            <li><strong>System:</strong> <code>SYSTEM_PROMPT</code> from <code>rag_prompts.py</code> (static filing/tabular guidance per source).</li>
+            <li><strong>Human:</strong> <code>ChatPromptTemplate.from_messages</code> in <code>answer()</code> — user question, <code>build_retrieval_context(...)</code>, fixed strings after context.</li>
+            <li><strong>Budget:</strong> <code>effective_context_char_budget</code> / <code>max_context_chars</code> from <code>num_ctx</code>, <code>num_predict</code>, overhead; per-chunk header + body truncation.</li>
+            <li><strong>JSON:</strong> <code>answer</code>, <code>sources</code>, <code>source_chunks</code>, <code>metadata_filters_used</code>, <code>retrieval_where_clause</code>, counts, <code>period_pinned_in_query</code>.</li>
+            <li><strong>UI:</strong> <code>chat.html</code> renders full <code>message.content</code>; Sources when <code>source_chunks</code> exist; <code>asyncio.wait_for</code> + <code>RAG_HTTP_TIMEOUT</code>.</li>
           </ul>
           <p class="slide-foot">Source: rag_prompts.py, edgar_hybrid_rag.py, rag_context.py, src/frontend/templates/chat.html, main.py</p>
         </div>
       </section>
 
-      <!-- 8 Testing -->
-      <section class="slide slide-content slide-text-only" aria-label="Testing">
-        <div class="slide-brand">
-          <span>Testing approach</span>
-          <span class="slide-num"></span>
-        </div>
-        <div class="slide-inner">
-          <h2 class="slide-heading">How runs are configured &amp; exercised</h2>
-          <ul class="slide-bullets">
-            <li><strong>Web UI:</strong> manual prompts through FastAPI form POST to <code>/chat</code>; same path calls <code>rag.answer</code>.</li>
-            <li>
-              <strong>Environment knobs:</strong> <code>RAGConfig.from_env()</code> reads variables documented in <code>rag_config.py</code> (e.g. <code>RAG_SEMANTIC_K</code>, <code>RAG_FINAL_K</code>,
-              <code>RAG_MULTI_ENTITY_PER_TICKER_SEMANTIC_K</code>, <code>RAG_USE_RERANKER</code>, <code>RAG_NUM_PREDICT</code>, <code>RAG_NUM_CTX</code>, collection/host/port, models).
-            </li>
-            <li><strong>CLI:</strong> <code>llm-user-prompt.py</code> exposes <code>--query</code>, collection/chroma flags, <code>--semantic-k</code>, <code>--final-k</code>, <code>--use-reranker</code> merged via <code>dataclasses.replace(RAGConfig.from_env(), …)</code>.</li>
-            <li><strong>Optional dotenv:</strong> <code>main.py</code> calls <code>load_dotenv()</code> when <code>python-dotenv</code> is installed.</li>
-          </ul>
-          <p class="slide-foot">Automated test harness not present under src/ for this deck; manual/Q&amp;A prompts tracked separately by maintainers.</p>
-        </div>
-      </section>
-
       <!-- 9 Findings -->
-      <section class="slide slide-content slide-text-only" aria-label="Findings">
+      <section class="slide slide-content slide-text-only slide-findings" aria-label="Findings">
         <div class="slide-brand">
           <span>Findings</span>
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Behavior encoded in source (selected)</h2>
-          <p class="slide-lede">Listed items are direct consequences of implemented branches—not benchmark scores.</p>
+          <h2 class="slide-heading">Manual Prompt Testing: Scenarios and Behavior</h2>
+          <p class="slide-lede">
+            Structured from <code>logs/test_questions.md</code> (prompt inventory). Each branch is a <strong>scenario class</strong>; nested lines pair a <strong>prompt theme</strong> with the <strong>observed system behavior</strong> noted in that log—not benchmark scores.
+          </p>
           <ul class="slide-bullets">
-            <li><strong>Issuer coverage control:</strong> multi-ticker questions trigger isolated filtered searches per symbol before pooling (addresses embedding dominance in a union).</li>
-            <li><strong>Graceful degradation:</strong> metadata-only filters that yield zero hits fall back to wider then unfiltered vector queries.</li>
-            <li><strong>Ticker hygiene:</strong> single-letter <code>TICKER_RE</code> matches excluded from <code>extract_metadata_filters</code> (<code>len(t)&gt;=2</code>); shared <code>FALSE_TICKER_WORDS</code> filters noisy uppercase tokens.</li>
-            <li><strong>Query normalization:</strong> <code>normalize_query_text</code> (NFKC + curly apostrophe flattening) feeds alias resolution and rerank keyword alignment.</li>
-            <li><strong>Chunk sourcing:</strong> UI attaches <code>source_chunks</code> mirroring retrieved docs; empty retrieval surfaces explicit Sources placeholder copy in template.</li>
+            <li>
+              <strong>Single-company</strong>
+              <ul>
+                <li>
+                  <span class="scenario-label">NVIDIA revenue / growth (~2y).</span>
+                  Early runs mixed in other companies; after retrieval changes, chunks stayed NVIDIA-only.
+                </li>
+                <li>
+                  <span class="scenario-label">JPMorgan CET1 ratio.</span>
+                  Exercises a narrow numeric readout on a single ticker (no extra behavior logged in the catalog).
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong>Multi-company</strong>
+              <ul>
+                <li>
+                  <span class="scenario-label">Vague pharma regulatory risks.</span>
+                  Broad sector ask; catalogued as a multi-entity stress case (no specific failure note in the doc).
+                </li>
+                <li>
+                  <span class="scenario-label">Apple vs Tesla vs JPMorgan risk comparison.</span>
+                  <strong>Observed:</strong> no Tesla chunks returned—only Apple and JPMorgan material surfaced.
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong>Time / filing constraints</strong>
+              <ul>
+                <li>
+                  <span class="scenario-label">NVDA data-center commentary, 2024Q3 pinned.</span>
+                  <strong>Observed:</strong> every chunk traced to NVDA 2024Q3 10-Q—quarter filter held.
+                </li>
+                <li>
+                  <span class="scenario-label">META trend analysis, &quot;10-K / annual only&quot; in the prompt.</span>
+                  <strong>Observed:</strong> chunks spanned annual reports present in the vector DB (per log: 2025 10-K not in corpus).
+                </li>
+              </ul>
+            </li>
+            <li>
+              <strong>Edge cases &amp; regressions</strong>
+              <ul>
+                <li>
+                  <span class="scenario-label">Palantir risks—no Palantir filings ingested.</span>
+                  <strong>Observed:</strong> retrieval still handed the model chunks; answer read as factual despite missing issuer corpus.
+                </li>
+                <li>
+                  <span class="scenario-label">Fabricated divestiture (Google 10-Q / Pixel sold to Meta).</span>
+                  <strong>Observed:</strong> answer did not use retrieved text to correct the false premise; retrieved chunks skewed to Meta only.
+                </li>
+              </ul>
+            </li>
           </ul>
-          <p class="slide-foot">Maps to edgar_hybrid_rag.py, edgar_query_patterns.py, rag_reranking.py, chat.html, main.py</p>
+          <p class="slide-foot">
+            Source catalog: <code>logs/test_questions.md</code>. Related implementation: <code>edgar_hybrid_rag.py</code>, <code>edgar_query_patterns.py</code>, <code>rag_reranking.py</code>, <code>chat.html</code>.
+          </p>
         </div>
       </section>
 
@@ -661,16 +762,16 @@
           <span class="slide-num"></span>
         </div>
         <div class="slide-inner">
-          <h2 class="slide-heading">Limits enforced by current code</h2>
+          <h2 class="slide-heading">Opportunities for Improvement</h2>
           <ul class="slide-bullets">
             <li><strong>Generation length:</strong> Ollama <code>num_predict</code> caps completion tokens; answers truncate when budget exhausted mid-stream.</li>
             <li><strong>Context window math:</strong> <code>RAGConfig.normalized()</code> clamps <code>num_predict</code> vs overhead/token slack assumptions documented in that method.</li>
             <li><strong>Retrieval breadth:</strong> candidate pool bounded by <code>semantic_k</code> / per-ticker analogues; final list capped by <code>final_k</code>.</li>
-            <li><strong>LLM rerank scope:</strong> scoring invoked only for prefix length <code>rerank_top_n</code>; tail retains lexical order.</li>
+            <li><strong>LLM re-rank scope:</strong> scoring invoked only for prefix length <code>rerank_top_n</code>; tail retains lexical order.</li>
             <li><strong>Infrastructure coupling:</strong> runtime depends on reachable Chroma HTTP API and Ollama models configured via env defaults in <code>RAGConfig</code>.</li>
             <li><strong>SYSTEM_PROMPT body:</strong> trailing separator snippet exists verbatim inside <code>rag_prompts.py</code> constant—review if unintended for production prompts.</li>
           </ul>
-          <p class="slide-foot">Future work is out of scope for this deck unless merged into src/</p>
+          <p class="slide-foot">See <code>logs/test_questions.md</code> for the full prompt tables; the Findings slide summarizes the same scenarios.</p>
         </div>
       </section>
 
@@ -682,12 +783,11 @@
         </div>
         <div class="slide-inner">
           <h1>Questions?</h1>
-          <p class="subtitle">
-            Architecture, retrieval filters, chunking/ingestion flags, Ollama/Chroma configuration, UI wiring, or evaluation methodology—please challenge assumptions grounded in the codebase paths cited earlier.
-          </p>
           <div class="rule" aria-hidden="true"></div>
           <p class="meta">
-            <strong>Thank you</strong> — Reference implementation under <code>src/backend/services/</code> and <code>src/frontend/</code>
+            <strong>Thank you</strong> — Reference implementation under <code>src/backend/*/</code> and <code>src/frontend/</code>.
+            <br>
+            Local runtime instructions are present in the root <code>README.md</code> file.
           </p>
         </div>
       </section>
