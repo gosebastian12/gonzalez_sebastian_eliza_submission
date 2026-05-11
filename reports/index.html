@@ -762,13 +762,14 @@
           <h2 class="slide-heading">Opportunities for Improvement</h2>
           <ul class="slide-bullets">
             <li><strong>Quantitative Performance Metrics:</strong> Calculating performance metrics such as Mean Reciprocal Rank, Hit Rate, Recall/Precision @K, etc. with libraries such as <code>ragas</code> would help quantify the performance of the system. Such code would be added to <code>evaluation.py</code>.</li>
-            <li><strong>Generation Length:</strong> Ollama <code>num_predict</code> caps completion tokens; answers truncate when budget exhausted mid-stream. Larger models would allow for longer generation lengths.</li>
+            <li><strong>Generation Length:</strong> Ollama <code>num_predict</code> caps completion tokens; answers truncate when budget exhausted mid-stream. Larger models would allow for longer generation lengths even when user questions are very long.</li>
             <li><strong>Context Length:</strong> The current context length is 4096 tokens. Larger models would allow for longer context lengths and thus more retrieved chunks.</li>
             <li><strong>Unit Testing:</strong> Development of unit tests would help ensure the system is working as expected, especially all steps of chunking process.</li>
             <li><strong>User-Provided Documents:</strong> A new feature could be added to allow users to upload their own documents to be ingested into the vector database.</li>
             <li><strong>Better Component Modularity:</strong> Reliance on ollama models and chroma database is strict and could be better generalized to allow for more flexibility in the system.</li>
             <li><strong>Handling of 10-K and 10-Q Diagrams:</strong> Any images present in company reports are not stored in corpus <code>.txt/</code> files. Their inclusion would allow system to answer any user questions about them by leveraging multi-modal LLM's.</li>
             <li><strong>Storing Chat History:</strong> Inclusion of a backend SQL database in architecture would allow for storing/caching chat history and retrieving it later.</li>
+            <li><strong>Safeguards Against False Information:</strong> The system currently not able to detect and correct false information in user questions.</li>
           </ul>
         </div>
       </section>
