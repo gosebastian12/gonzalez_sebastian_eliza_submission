@@ -25,23 +25,30 @@ flowchart LR
   end
   subgraph ingest [Ingestion]
     CHUNK["chunk_and_embed.py"]
-    OLLAMA_E["Ollama embeddings"]
+    OLLAMA_E["Ollama embeddings<br/>qwen3-embedding:0.6b<br/>1024-dim vectors"]
   end
   subgraph store [Vector DB]
-    CHROMA["Chroma Docker :8001"]
+    CHROMA["Chroma Docker :8001<br/>collection edgar_reports"]
   end
   subgraph app [Application]
     UI["FastAPI UI :8000"]
-    RAG["RAG services llm-user-prompt.py + modules"]
-    OLLAMA_L["Ollama LLM"]
+    subgraph rag [RAG — llm-user-prompt + EdgarHybridRAG]
+      direction LR
+      RETR["Retrieval<br/>metadata filters + Chroma k-NN"]
+      RERANK["Re-ranking<br/>lexical + optional LLM scores"]
+      ANS["Answer<br/>context + ChatOllama"]
+    end
+    OLLAMA_L["Ollama LLM<br/>llama3.2:1b"]
   end
   CORPUS --> CHUNK
   CHUNK --> OLLAMA_E
   OLLAMA_E --> CHROMA
-  UI --> RAG
-  RAG --> CHROMA
-  RAG --> OLLAMA_E
-  RAG --> OLLAMA_L
+  UI --> RETR
+  RETR --> RERANK --> ANS
+  RETR --> CHROMA
+  RETR --> OLLAMA_E
+  RERANK --> OLLAMA_L
+  ANS --> OLLAMA_L
 ```
 
 **Dependency chain (runtime order):**

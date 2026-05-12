@@ -30,7 +30,7 @@ Short-lived catalog of **user-style questions** used to exercise retrieval, rera
 | Prompt | Focus | Notes |
 |--------|-------|-------|
 | "What regulatory risks do the major pharmaceutical companies face, and how are they addressing them?" | Vague about companies. Requesting information about past *and* future. | RAG system was able to retrieve chunks from all pharmaceutical companies in Corpus - MRK, PFE, JNJ, LLY. |
-| "What are the primary risk factors facing Apple, Tesla, and JPMorgan, and how do they compare?" | Specific about companies of interest. Request for comparison amongst them. | **No chunks about TSLA were retrieved. Only for AAPL and JPM.** |
+| "What are the primary risk factors facing Apple, Tesla, and JPMorgan, and how do they compare?" | Specific about companies of interest. Request for comparison amongst them. | No chunks about TSLA were retrieved at first. Increasing limits on num. of retrieved chunks resolved issue. |
 
 ---
 
@@ -38,7 +38,7 @@ Short-lived catalog of **user-style questions** used to exercise retrieval, rera
 
 | Prompt | Focus | Notes |
 |--------|-------|-------|
-| “What did NVDA say about data center demand in 2024Q3?” | Explicity quarter filter from user. | All chunks came from the 2024Q3 10Q NVDA report. |
+| “What did NVDA say about data center demand in 2024Q3?” | Explicitly quarter filter from user. | All chunks came from the 2024Q3 10Q NVDA report. |
 | "Conduct a trend analysis for META referencing the financial data it reported. Only utilize 10-K, annual reports."| Explicit user instructions to only use 10-K reports. | Retrieved chunks came from all annual reports ingested into vector db. (2025 10-K was not included in corpus). |
 
 ---
